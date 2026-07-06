@@ -47,7 +47,7 @@ def create_shield_svg(color, size=32, label=""):
     else:
         hex_color = color
     
-    # Create simple shield polygon
+    # Create simple shield polygon with rounded corners and gradient
     svg = f'''
     <svg width="{size}" height="{size}" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
         <defs>
@@ -55,14 +55,18 @@ def create_shield_svg(color, size=32, label=""):
                 <stop offset="0%" style="stop-color:{hex_color};stop-opacity:1" />
                 <stop offset="100%" style="stop-color:{hex_color};stop-opacity:0.8" />
             </linearGradient>
+            <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+                <feDropShadow dx="0" dy="1" stdDeviation="2" flood-opacity="0.3"/>
+            </filter>
         </defs>
         <polygon points="16,2 28,6 26,22 16,30 6,22 4,6" 
                  fill="url(#shieldGrad)" 
                  stroke="rgba(255,255,255,0.6)" 
-                 stroke-width="1.5"/>
+                 stroke-width="1.5"
+                 filter="url(#shadow)"/>
         <text x="16" y="18" text-anchor="middle" 
               font-size="7" fill="white" font-weight="bold" 
-              font-family="sans-serif" text-shadow="0 1px 2px rgba(0,0,0,0.3)">
+              font-family="sans-serif">
             {label[:3]}
         </text>
     </svg>
@@ -84,10 +88,27 @@ def add_sdo_shield(map_obj, sdo):
     # Create short label (first 2-3 letters of the SDO name)
     label = sdo["name"].replace("SDO ", "").split(" ")[0][:3]
     
-    # Create the shield icon (32px)
+    # ── URGENCY GLOW (Added BEFORE shield so it renders behind) ──
+    urgency = sdo.get("urgency_factor", 0)
+    
+    # ✅ FIX: Lowered threshold from 0.5 to 0.1 to show glow more often
+    if urgency > 0.1:
+        glow_color = "#dc2626" if urgency > 0.7 else "#f97316"
+        glow_radius = 20 + urgency * 30  # Bigger: 35-50px
+        folium.Circle(
+            location=[sdo["lat"], sdo["lng"]],
+            radius=glow_radius,
+            color=glow_color,
+            fill=True,
+            fill_color=glow_color,
+            fill_opacity=0.2 + urgency * 0.4,  # More opaque: 0.24-0.60
+            weight=1.5,
+            popup=f"⚠️ Urgency Level: {urgency:.0%}"
+        ).add_to(map_obj)
+    
+    # ── SHIELD (Added after glow so it sits on top) ──
     icon_url = create_shield_svg(color, size=32, label=label)
     
-    # Create custom icon
     icon = folium.CustomIcon(
         icon_url,
         icon_size=(32, 32),
@@ -95,29 +116,12 @@ def add_sdo_shield(map_obj, sdo):
         popup_anchor=(0, -16)
     )
     
-    # Add the marker
     folium.Marker(
         location=[sdo["lat"], sdo["lng"]],
         popup=folium.Popup(get_sdo_popup_html(sdo), max_width=250),
         icon=icon,
         tooltip=sdo["name"]
     ).add_to(map_obj)
-    
-    # ── Urgency Glow (visual alternative to CSS pulse) ──
-    urgency = sdo.get("urgency_factor", 0)
-    if urgency > 0.5:
-        glow_color = "#dc2626" if urgency > 0.8 else "#f97316"
-        glow_radius = 15 + urgency * 20  # Smaller glow for 32px shield
-        folium.Circle(
-            location=[sdo["lat"], sdo["lng"]],
-            radius=glow_radius,
-            color=glow_color,
-            fill=True,
-            fill_color=glow_color,
-            fill_opacity=0.1 + urgency * 0.25,
-            weight=1.5,
-            popup=f"⚠️ Urgency Level: {urgency:.0%}"
-        ).add_to(map_obj)
 
 
 def add_school_dot(map_obj, school):
