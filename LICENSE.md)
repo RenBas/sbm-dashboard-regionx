@@ -1,0 +1,18 @@
+
+---
+
+## 🚀 How to Deploy
+
+### Option A: Streamlit Community Cloud (Quickest)
+1. Push this code to a public GitHub repository
+2. Go to [share.streamlit.io](https://share.streamlit.io)
+3. Click "New app" → Select your repo → Deploy
+4. Share the URL with DepEd Region X
+
+### Option B: Local Server (For internal hosting)
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Run the app
+streamlit run app.py --server.port 8501 --server.address 0.0.0.0
