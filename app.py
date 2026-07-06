@@ -144,8 +144,21 @@ except ImportError as e:
 except Exception as e:
     st.error(f"Map rendering failed: {e}")
 
-# ─── MAP LEGEND ───
+# ─── MAP LEGEND WITH FOOTNOTE ───
 st.markdown("---")
+
+# ✅ New explanatory footnote about the glow
+st.markdown("""
+<div style="background-color:#f8f9fa;padding:12px 16px;border-radius:8px;border-left:4px solid #0033a0;margin-bottom:12px;">
+    <b>💡 About the Glow:</b> The pulsing glow behind each SDO shield indicates urgency based on the division's <b>lowest SBM dimension score</b>.
+    <br>
+    <span style="color:#dc2626;">🔴 <b>Red glow</b></span> = Critical (score &lt; 1.0) – immediate attention needed.
+    <span style="color:#f97316;margin-left:16px;">🟠 <b>Orange glow</b></span> = Warning (score 1.0 – 1.9) – monitor closely.
+    <span style="color:#eab308;margin-left:16px;">🟡 <b>Yellow glow</b></span> = Monitor (score 2.0 – 2.4) – improvement needed.
+    <span style="color:#6b7280;margin-left:16px;">⚪ <b>No glow</b></span> = Stable (score ≥ 2.5) – performing well.
+</div>
+""", unsafe_allow_html=True)
+
 st.markdown("### 🗺️ Map Legend")
 
 col1, col2, col3 = st.columns([1, 1, 1])
@@ -236,7 +249,7 @@ with tab1:
                 "Score": st.column_config.NumberColumn(format="%.1f"),
             },
             hide_index=True,
-            width='stretch'  # ✅ Updated from use_container_width
+            width='stretch'
         )
         st.caption(f"* Average across {len(complete_schools)} complete schools in this division")
     else:
@@ -247,13 +260,13 @@ with tab2:
     reg_avgs = compute_dimension_averages(all_complete)
     if any(dim_avgs):
         fig = create_radar_chart(dim_avgs, reg_avgs)
-        st.plotly_chart(fig, width='stretch')  # ✅ Updated
+        st.plotly_chart(fig, width='stretch')
     else:
         st.info("No dimension data available for this division.")
 
 with tab3:
     if complete_schools:
-        random.seed(42)  # Stable randomization
+        random.seed(42)
         current_avg = overall_avg
         years = ["2023-2024", "2022-2023", "2021-2022"]
         values = [
@@ -262,7 +275,7 @@ with tab3:
             round(max(0, min(3, current_avg - 0.4 + (random.random() - 0.5) * 0.4)), 1)
         ]
         fig = create_trend_chart(years, values)
-        st.plotly_chart(fig, width='stretch')  # ✅ Updated
+        st.plotly_chart(fig, width='stretch')
     else:
         st.info("No historical data available for this division.")
 
