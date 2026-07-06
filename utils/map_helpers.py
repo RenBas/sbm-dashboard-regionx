@@ -1,5 +1,5 @@
-"""Helper functions for creating Folium map elements – SIMPLIFIED VERSION.
-   Uses standard CircleMarker and Custom Icon (no custom HTML/CSS in markers).
+"""Helper functions for creating Folium map elements – DIAGNOSTIC VERSION.
+   Uses CircleMarker for glow (more reliable than Circle).
 """
 
 import folium
@@ -9,22 +9,19 @@ from .constants import DIMENSION_NAMES, SHIELD_COLORS, DEGREE_COLORS
 # ─── COLOR HELPERS ───
 
 def get_shield_color(score):
-    """Return shield color based on lowest dimension score."""
     if score >= 2.5:
-        return SHIELD_COLORS["high"]       # "#0d9488" (Teal)
+        return SHIELD_COLORS["high"]
     elif score >= 2.0:
-        return SHIELD_COLORS["medium_high"] # "#eab308" (Yellow)
+        return SHIELD_COLORS["medium_high"]
     elif score >= 1.0:
-        return SHIELD_COLORS["medium_low"]  # "#f97316" (Orange)
+        return SHIELD_COLORS["medium_low"]
     else:
-        return SHIELD_COLORS["low"]         # "#dc2626" (Red)
+        return SHIELD_COLORS["low"]
 
 def get_school_dot_color(degree):
-    """Return dot color based on SBM degree."""
     return DEGREE_COLORS.get(degree, "#9ca3af")
 
 def get_school_dot_size(enrollment):
-    """Return dot size based on enrollment."""
     if enrollment == 0:
         return 6
     elif enrollment < 500:
@@ -37,10 +34,6 @@ def get_school_dot_size(enrollment):
 # ─── SHIELD SVG GENERATOR ───
 
 def create_shield_svg(color, size=32, label=""):
-    """
-    Create a shield SVG as a base64-encoded string.
-    Size controls the shield dimensions (default 32px).
-    """
     if color.startswith('#'):
         hex_color = color
     else:
@@ -78,32 +71,26 @@ def create_shield_svg(color, size=32, label=""):
 def add_sdo_shield(map_obj, sdo):
     """
     Add an SDO marker using a custom SVG shield icon.
-    DIAGNOSTIC VERSION: Forces glow on ALL SDOs
+    DIAGNOSTIC VERSION: Adds a huge, unmistakable red glow using CircleMarker.
     """
     color = get_shield_color(sdo["lowest_dim_score"])
-    
-    # Create short label
     label = sdo["name"].replace("SDO ", "").split(" ")[0][:3]
     
-    # ── 🔴 DIAGNOSTIC: FORCE GLOW ON ALL SDOs ──
-    # This ignores the urgency_factor and always adds a glow
-    glow_color = "#dc2626"  # Red for all (diagnostic)
-    glow_radius = 30  # Fixed size for testing
-    
-    folium.Circle(
+    # ── 🔴 HUGE RED GLOW (Diagnostic) ──
+    # Using CircleMarker – more reliable than Circle
+    folium.CircleMarker(
         location=[sdo["lat"], sdo["lng"]],
-        radius=glow_radius,
-        color=glow_color,
+        radius=40,                      # Very large
+        color="#ff0000",                # Bright red border
         fill=True,
-        fill_color=glow_color,
-        fill_opacity=0.3,  # Semi-transparent
-        weight=2,
-        popup="🔴 DIAGNOSTIC GLOW - Forced on all SDOs"
+        fill_color="#ff0000",           # Bright red fill
+        fill_opacity=0.5,               # Semi-transparent
+        weight=3,                       # Thick border
+        popup="🔴 DIAGNOSTIC GLOW (CircleMarker)"
     ).add_to(map_obj)
     
     # ── SHIELD ──
     icon_url = create_shield_svg(color, size=32, label=label)
-    
     icon = folium.CustomIcon(
         icon_url,
         icon_size=(32, 32),
@@ -147,7 +134,6 @@ def add_school_dot(map_obj, school):
 # ─── POPUP HTML HELPERS ───
 
 def get_sdo_popup_html(sdo):
-    """Generate HTML popup content for an SDO shield."""
     return f'''
     <div style="font-weight:600;font-size:15px;color:#0033a0;">{sdo["name"]}</div>
     <div style="font-size:12px;color:#4b5563;">{sdo["capital"]}</div>
@@ -161,7 +147,6 @@ def get_sdo_popup_html(sdo):
     '''
 
 def get_school_popup_html(school):
-    """Generate HTML popup content for a school dot."""
     if school["data_status"] == "Pending":
         return f'''
         <div style="font-weight:600;font-size:14px;color:#0033a0;">{school["name"]}</div>
