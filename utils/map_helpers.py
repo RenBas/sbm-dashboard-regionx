@@ -1,5 +1,5 @@
-"""Helper functions for creating Folium map elements – DIAGNOSTIC VERSION.
-   Uses CircleMarker for glow (more reliable than Circle).
+"""Helper functions for creating Folium map elements – FINAL VERSION.
+   Uses CircleMarker with layered circles for glow effect.
 """
 
 import folium
@@ -66,28 +66,79 @@ def create_shield_svg(color, size=32, label=""):
     b64 = base64.b64encode(svg_bytes).decode('utf-8')
     return f"data:image/svg+xml;base64,{b64}"
 
+# ─── GLOW HELPER ───
+
+def add_glow(map_obj, lat, lng, urgency, color):
+    """
+    Add a layered glow effect using multiple circles.
+    Higher urgency = larger, brighter glow.
+    """
+    # Only add glow if urgency is above threshold
+    if urgency <= 0.1:
+        return
+    
+    # Determine glow intensity (0.1 to 1.0)
+    intensity = urgency
+    
+    # Define glow colors (red for critical, orange for moderate)
+    if urgency > 0.7:
+        glow_color = "#dc2626"  # Red (critical)
+        base_opacity = 0.4
+    elif urgency > 0.4:
+        glow_color = "#f97316"  # Orange (warning)
+        base_opacity = 0.3
+    else:
+        glow_color = "#eab308"  # Yellow (monitor)
+        base_opacity = 0.2
+    
+    # Base radius (larger for higher urgency)
+    base_radius = 15 + intensity * 25  # 15px to 40px
+    
+    # ── LAYER 1: Inner core (small, bright) ──
+    folium.CircleMarker(
+        location=[lat, lng],
+        radius=base_radius * 0.3,
+        color=glow_color,
+        fill=True,
+        fill_color=glow_color,
+        fill_opacity=base_opacity * 1.0,
+        weight=0,
+    ).add_to(map_obj)
+    
+    # ── LAYER 2: Middle glow (medium, semi-transparent) ──
+    folium.CircleMarker(
+        location=[lat, lng],
+        radius=base_radius * 0.6,
+        color=glow_color,
+        fill=True,
+        fill_color=glow_color,
+        fill_opacity=base_opacity * 0.5,
+        weight=0,
+    ).add_to(map_obj)
+    
+    # ── LAYER 3: Outer halo (large, very transparent) ──
+    folium.CircleMarker(
+        location=[lat, lng],
+        radius=base_radius * 1.0,
+        color=glow_color,
+        fill=True,
+        fill_color=glow_color,
+        fill_opacity=base_opacity * 0.2,
+        weight=0,
+    ).add_to(map_obj)
+
 # ─── MARKER FUNCTIONS ───
 
 def add_sdo_shield(map_obj, sdo):
     """
-    Add an SDO marker using a custom SVG shield icon.
-    DIAGNOSTIC VERSION: Adds a huge, unmistakable red glow using CircleMarker.
+    Add an SDO marker with custom SVG shield and layered glow.
     """
     color = get_shield_color(sdo["lowest_dim_score"])
     label = sdo["name"].replace("SDO ", "").split(" ")[0][:3]
+    urgency = sdo.get("urgency_factor", 0)
     
-    # ── 🔴 HUGE RED GLOW (Diagnostic) ──
-    # Using CircleMarker – more reliable than Circle
-    folium.CircleMarker(
-        location=[sdo["lat"], sdo["lng"]],
-        radius=40,                      # Very large
-        color="#ff0000",                # Bright red border
-        fill=True,
-        fill_color="#ff0000",           # Bright red fill
-        fill_opacity=0.5,               # Semi-transparent
-        weight=3,                       # Thick border
-        popup="🔴 DIAGNOSTIC GLOW (CircleMarker)"
-    ).add_to(map_obj)
+    # ── LAYERED GLOW (added before shield so it sits behind) ──
+    add_glow(map_obj, sdo["lat"], sdo["lng"], urgency, color)
     
     # ── SHIELD ──
     icon_url = create_shield_svg(color, size=32, label=label)
