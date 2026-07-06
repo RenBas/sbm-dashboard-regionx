@@ -1,8 +1,7 @@
 """Main Streamlit application for SBM Dashboard – Region X."""
 
 import streamlit as st
-import sys
-import time
+import random
 
 # ─── PAGE CONFIG ───
 st.set_page_config(
@@ -22,14 +21,27 @@ except FileNotFoundError:
 # ─── IMPORTS ───
 from utils.constants import DIMENSION_NAMES
 from utils.data_loader import load_sdo_data, load_all_schools, get_schools_by_sdo, compute_dimension_averages
-from utils.map_helpers import add_sdo_shield, add_school_dot  # ✅ NEW simplified imports
+from utils.map_helpers import add_sdo_shield, add_school_dot
 from utils.chart_helpers import create_radar_chart, create_trend_chart, create_indicators_table
 
-# ─── LOAD DATA ───
-sdo_list = load_sdo_data()
-schools = load_all_schools(sdo_list)
+# ════════════════════════════════════════════════════════════════
+# ✅ FIX 1: CACHE THE DATA – Runs only once!
+# ════════════════════════════════════════════════════════════════
 
-# ─── SIDEBAR ───
+@st.cache_data
+def load_cached_data():
+    """Load SDO data and generate schools. Cached to prevent regeneration on every rerun."""
+    sdo_list = load_sdo_data()
+    schools = load_all_schools(sdo_list)
+    return sdo_list, schools
+
+# Load data (this runs only once, not on every interaction)
+sdo_list, schools = load_cached_data()
+
+# ════════════════════════════════════════════════════════════════
+# SIDEBAR
+# ════════════════════════════════════════════════════════════════
+
 with st.sidebar:
     st.image("https://www.deped.gov.ph/wp-content/uploads/2021/07/DepEd-logo.png", width=180)
     st.markdown("---")
@@ -56,7 +68,10 @@ with st.sidebar:
     st.caption("SBM Digital Twin · Prototype v1.0")
     st.caption("DepEd Region X – Northern Mindanao")
 
-# ─── MAIN CONTENT ───
+# ════════════════════════════════════════════════════════════════
+# MAIN CONTENT
+# ════════════════════════════════════════════════════════════════
+
 st.markdown(f"## 🎓 SBM Dashboard: {selected_sdo['name']}")
 st.caption(f"Capital: {selected_sdo['capital']} · {selected_sdo['id']} schools")
 
@@ -113,16 +128,19 @@ try:
     map_center = [selected_sdo["lat"], selected_sdo["lng"]]
     m = folium.Map(location=map_center, zoom_start=8, tiles="OpenStreetMap")
     
-    # ── Add SDO shields (SIMPLIFIED) ──
+    # Add SDO shields
     for sdo in sdo_list:
         add_sdo_shield(m, sdo)
     
-    # ── Add school dots (SIMPLIFIED) ──
+    # Add school dots
     for school in schools_in_sdo:
         add_school_dot(m, school)
     
-    # ── Display map ──
-    st_folium(m, width=None, height=500)
+    # ✅ FIX 2: Map renders once and returns data without forcing a full app rebuild
+    # We capture the return data but don't use it (unless we want click events later)
+    map_data = st_folium(m, width=None, height=500, key="sbm_interactive_map")
+    
+    # If you want to use clicks later for auto-zoom, you can access map_data['last_clicked']
     
 except ImportError as e:
     st.error(f"Missing import: {e}. Please run: pip install folium streamlit-folium")
@@ -159,9 +177,12 @@ with tab2:
 
 with tab3:
     if complete_schools:
-        import random
+        # This simulation uses random, but since it's inside the tab and only runs
+        # on tab load, it's fine. We keep it as is.
         current_avg = overall_avg
         years = ["2023-2024", "2022-2023", "2021-2022"]
+        # Seed the random to keep it stable-ish, or just let it vary slightly.
+        random.seed(42)  # <-- This makes the trend stable
         values = [
             current_avg,
             round(max(0, min(3, current_avg - 0.2 + (random.random() - 0.5) * 0.4)), 1),
