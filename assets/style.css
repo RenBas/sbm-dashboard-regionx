@@ -1,1 +1,202 @@
+/* ─── GLOBAL STREAMLIT OVERRIDES ─── */
 
+/* Main container padding */
+.main > div {
+    padding-top: 1rem;
+}
+
+/* ─── SIDEBAR STYLING ─── */
+.css-1d391kg, .css-12oz5g7 {
+    background-color: #f8fafc;
+    border-right: 1px solid #e5e7eb;
+}
+
+.sidebar .sidebar-content {
+    background-color: #f8fafc;
+}
+
+/* Sidebar logo spacing */
+.css-1d391kg img {
+    margin-bottom: 0.5rem;
+}
+
+/* ─── METRIC CARDS (KPI) ─── */
+[data-testid="metric-container"] {
+    background-color: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    padding: 0.75rem 1rem 0.5rem 1rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    transition: box-shadow 0.2s ease;
+}
+
+[data-testid="metric-container"]:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+[data-testid="metric-container"] label {
+    font-size: 0.75rem !important;
+    font-weight: 600 !important;
+    color: #6b7280 !important;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+[data-testid="metric-container"] [data-testid="metric-value"] {
+    font-size: 1.6rem !important;
+    font-weight: 700 !important;
+    color: #1a1a2e !important;
+}
+
+/* ─── TABS STYLING ─── */
+.stTabs [data-baseweb="tab-list"] {
+    gap: 0.5rem;
+    background-color: #f9fafb;
+    border-radius: 8px 8px 0 0;
+    padding: 0.25rem 0.5rem;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.stTabs [data-baseweb="tab"] {
+    border-radius: 6px 6px 0 0;
+    padding: 0.4rem 1.2rem;
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: #6b7280;
+    background: transparent;
+    border-bottom: 3px solid transparent;
+    transition: 0.15s;
+}
+
+.stTabs [data-baseweb="tab"]:hover {
+    color: #1a1a2e;
+    background-color: #f3f4f6;
+}
+
+.stTabs [data-baseweb="tab"][aria-selected="true"] {
+    color: #0033a0;
+    border-bottom-color: #0033a0;
+    background: transparent;
+}
+
+/* ─── DATA TABLE (Indicators) ─── */
+.stDataFrame {
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.stDataFrame thead tr th {
+    background-color: #f3f4f6 !important;
+    font-weight: 600 !important;
+    color: #374151 !important;
+    font-size: 0.8rem !important;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    padding: 0.5rem 0.75rem !important;
+}
+
+.stDataFrame tbody tr td {
+    padding: 0.4rem 0.75rem !important;
+    font-size: 0.85rem;
+    border-bottom: 1px solid #f3f4f6;
+}
+
+.stDataFrame tbody tr:hover td {
+    background-color: #f9fafb;
+}
+
+/* ─── HEADER / TITLE OVERRIDES ─── */
+h1, h2, h3 {
+    font-family: 'Segoe UI', Roboto, system-ui, sans-serif;
+    font-weight: 600;
+    color: #1a1a2e;
+}
+
+h1 {
+    font-size: 1.8rem !important;
+    border-bottom: 3px solid #0033a0;
+    padding-bottom: 0.3rem;
+    display: inline-block;
+}
+
+h2 {
+    font-size: 1.4rem !important;
+}
+
+/* ─── CAPTION / FOOTER ─── */
+.stCaption {
+    color: #6b7280;
+    font-size: 0.8rem;
+}
+
+/* ─── DIVIDERS ─── */
+hr {
+    border: none;
+    border-top: 1px solid #e5e7eb;
+    margin: 1rem 0;
+}
+
+/* ─── SEARCH BOX ─── */
+[data-testid="stTextInput"] input {
+    border-radius: 6px;
+    border: 1px solid #d1d5db;
+    padding: 0.4rem 0.75rem;
+    font-size: 0.85rem;
+    transition: 0.2s;
+}
+
+[data-testid="stTextInput"] input:focus {
+    border-color: #0033a0;
+    box-shadow: 0 0 0 2px rgba(0, 51, 160, 0.15);
+    outline: none;
+}
+
+/* ─── SELECT BOX ─── */
+[data-testid="stSelectbox"] div[data-baseweb="select"] {
+    border-radius: 6px;
+    border-color: #d1d5db;
+}
+
+/* ─── INFO / WARNING / SUCCESS BLOCKS ─── */
+.stAlert {
+    border-radius: 8px;
+    border-left-width: 4px;
+}
+
+/* ─── RESPONSIVE TWEAKS ─── */
+@media (max-width: 768px) {
+    [data-testid="metric-container"] [data-testid="metric-value"] {
+        font-size: 1.2rem !important;
+    }
+    
+    .stTabs [data-baseweb="tab"] {
+        padding: 0.3rem 0.8rem;
+        font-size: 0.75rem;
+    }
+}
+
+/* ─── FOLIUM MAP OVERRIDES (fix for container) ─── */
+.folium-map {
+    border-radius: 10px;
+    border: 1px solid #e5e7eb;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+/* ─── LEGEND STYLING (since we inject it manually via map_helpers) ─── */
+.map-legend {
+    background: rgba(255, 255, 255, 0.92) !important;
+    backdrop-filter: blur(4px);
+    border: 1px solid #e5e7eb !important;
+    border-radius: 8px !important;
+    padding: 10px 14px !important;
+    font-size: 11px !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.10) !important;
+    pointer-events: none;
+}
+
+/* ─── DEPED BRAND COLORS (for reference) ─── */
+/* Primary Blue: #0033A0 */
+/* Secondary Red: #CE1126 */
+/* Background: #F8FAFC */
