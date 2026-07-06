@@ -89,11 +89,33 @@ def load_cached_data():
 sdo_list, schools = load_cached_data()
 
 # ════════════════════════════════════════════════════════════════
-# SIDEBAR
+# SIDEBAR (Reorganized: Appearance at the top)
 # ════════════════════════════════════════════════════════════════
 
 with st.sidebar:
-    st.image("https://www.deped.gov.ph/wp-content/uploads/2021/07/DepEd-logo.png", width=180)
+    # ── Logo ──
+    st.image(
+        "https://www.deped.gov.ph/wp-content/uploads/2021/07/DepEd-logo.png",
+        width=150,
+        use_container_width=False
+    )
+    
+    # ── Appearance (Moved to the top) ──
+    st.markdown("---")
+    st.markdown("### 🎨 Appearance")
+    col_light, col_dark = st.columns(2)
+    with col_light:
+        if st.button("☀️ Light", use_container_width=True,
+                     type="primary" if st.session_state.custom_theme == "light" else "secondary"):
+            st.session_state.custom_theme = "light"
+            st.rerun()
+    with col_dark:
+        if st.button("🌙 Dark", use_container_width=True,
+                     type="primary" if st.session_state.custom_theme == "dark" else "secondary"):
+            st.session_state.custom_theme = "dark"
+            st.rerun()
+    
+    # ── Navigation ──
     st.markdown("---")
     st.markdown("### 🗺️ Navigation")
     
@@ -113,20 +135,6 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("### 🔍 Search School")
     search_query = st.text_input("Type school name or ID", placeholder="e.g., Central")
-    
-    st.markdown("---")
-    st.markdown("### 🎨 Appearance")
-    col_light, col_dark = st.columns(2)
-    with col_light:
-        if st.button("☀️ Light", use_container_width=True, 
-                     type="primary" if st.session_state.custom_theme == "light" else "secondary"):
-            st.session_state.custom_theme = "light"
-            st.rerun()
-    with col_dark:
-        if st.button("🌙 Dark", use_container_width=True,
-                     type="primary" if st.session_state.custom_theme == "dark" else "secondary"):
-            st.session_state.custom_theme = "dark"
-            st.rerun()
     
     st.markdown("---")
     st.caption("SBM Digital Twin · Prototype v1.0")
