@@ -66,38 +66,38 @@ def create_shield_svg(color, size=32, label=""):
     b64 = base64.b64encode(svg_bytes).decode('utf-8')
     return f"data:image/svg+xml;base64,{b64}"
 
-# ─── GLOW HELPER ───
+# ─── GLOW HELPER (Enhanced with 4 layers) ───
 
 def add_glow(map_obj, lat, lng, urgency, color):
     """
-    Add a layered glow effect using multiple circles.
-    Higher urgency = larger, brighter glow.
+    Add a layered glow effect using multiple circles with smooth transitions.
+    Higher urgency = larger, brighter, more prominent glow.
     """
     # Only add glow if urgency is above threshold
     if urgency <= 0.1:
         return
     
     # Determine glow intensity (0.1 to 1.0)
-    intensity = urgency
+    intensity = min(1.0, urgency)
     
-    # Define glow colors (red for critical, orange for moderate)
+    # Define glow colors based on urgency
     if urgency > 0.7:
         glow_color = "#dc2626"  # Red (critical)
-        base_opacity = 0.4
+        base_opacity = 0.5
     elif urgency > 0.4:
         glow_color = "#f97316"  # Orange (warning)
-        base_opacity = 0.3
+        base_opacity = 0.4
     else:
         glow_color = "#eab308"  # Yellow (monitor)
-        base_opacity = 0.2
+        base_opacity = 0.3
     
     # Base radius (larger for higher urgency)
-    base_radius = 15 + intensity * 25  # 15px to 40px
+    base_radius = 20 + intensity * 35  # 20px to 55px
     
-    # ── LAYER 1: Inner core (small, bright) ──
+    # ── LAYER 1: Core (small, bright) ──
     folium.CircleMarker(
         location=[lat, lng],
-        radius=base_radius * 0.3,
+        radius=base_radius * 0.2,
         color=glow_color,
         fill=True,
         fill_color=glow_color,
@@ -105,25 +105,36 @@ def add_glow(map_obj, lat, lng, urgency, color):
         weight=0,
     ).add_to(map_obj)
     
-    # ── LAYER 2: Middle glow (medium, semi-transparent) ──
+    # ── LAYER 2: Inner halo ──
     folium.CircleMarker(
         location=[lat, lng],
-        radius=base_radius * 0.6,
+        radius=base_radius * 0.45,
         color=glow_color,
         fill=True,
         fill_color=glow_color,
-        fill_opacity=base_opacity * 0.5,
+        fill_opacity=base_opacity * 0.6,
         weight=0,
     ).add_to(map_obj)
     
-    # ── LAYER 3: Outer halo (large, very transparent) ──
+    # ── LAYER 3: Mid halo ──
+    folium.CircleMarker(
+        location=[lat, lng],
+        radius=base_radius * 0.7,
+        color=glow_color,
+        fill=True,
+        fill_color=glow_color,
+        fill_opacity=base_opacity * 0.3,
+        weight=0,
+    ).add_to(map_obj)
+    
+    # ── LAYER 4: Outer halo (very transparent) ──
     folium.CircleMarker(
         location=[lat, lng],
         radius=base_radius * 1.0,
         color=glow_color,
         fill=True,
         fill_color=glow_color,
-        fill_opacity=base_opacity * 0.2,
+        fill_opacity=base_opacity * 0.12,
         weight=0,
     ).add_to(map_obj)
 
@@ -131,13 +142,13 @@ def add_glow(map_obj, lat, lng, urgency, color):
 
 def add_sdo_shield(map_obj, sdo):
     """
-    Add an SDO marker with custom SVG shield and layered glow.
+    Add an SDO marker with custom SVG shield and enhanced layered glow.
     """
     color = get_shield_color(sdo["lowest_dim_score"])
     label = sdo["name"].replace("SDO ", "").split(" ")[0][:3]
     urgency = sdo.get("urgency_factor", 0)
     
-    # ── LAYERED GLOW (added before shield so it sits behind) ──
+    # ── ENHANCED GLOW (4 layers, smooth transition) ──
     add_glow(map_obj, sdo["lat"], sdo["lng"], urgency, color)
     
     # ── SHIELD ──
