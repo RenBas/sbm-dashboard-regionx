@@ -2,6 +2,7 @@
 
 import streamlit as st
 import random
+import base64
 
 # ─── PAGE CONFIG ───
 st.set_page_config(
@@ -11,11 +12,10 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# ─── CUSTOM THEME (Independent of Streamlit's native theme) ───
+# ─── CUSTOM THEME ───
 if "custom_theme" not in st.session_state:
     st.session_state.custom_theme = "light"
 
-# Apply custom theme CSS based on session state
 if st.session_state.custom_theme == "dark":
     st.markdown("""
     <style>
@@ -53,6 +53,9 @@ if st.session_state.custom_theme == "dark":
         h1, h2, h3, h4, h5, h6 { color: #FAFAFA !important; }
         .custom-footnote { background-color: #1A1C23 !important; border-left: 4px solid #0033A0 !important; color: #FAFAFA !important; }
         .custom-footnote .text-muted { color: #9CA3AF !important; }
+        /* HIDE STREAMLIT FOOTER */
+        footer { visibility: hidden !important; }
+        .stApp > footer { display: none !important; }
     </style>
     """, unsafe_allow_html=True)
 else:
@@ -60,6 +63,8 @@ else:
     <style>
         .custom-footnote { background-color: #F8F9FA !important; border-left: 4px solid #0033A0 !important; color: #1A1A2E !important; }
         .custom-footnote .text-muted { color: #6B7280 !important; }
+        footer { visibility: hidden !important; }
+        .stApp > footer { display: none !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -89,18 +94,17 @@ def load_cached_data():
 sdo_list, schools = load_cached_data()
 
 # ════════════════════════════════════════════════════════════════
-# SIDEBAR (Reorganized: Appearance at the top)
+# SIDEBAR
 # ════════════════════════════════════════════════════════════════
 
 with st.sidebar:
-    # ── Logo ──
-    st.image(
-        "https://www.deped.gov.ph/wp-content/uploads/2021/07/DepEd-logo.png",
-        width=150,
-        use_container_width=False
-    )
+    # ── Logo (using base64 to avoid broken image) ──
+    # DepEd logo base64 (small version)
+    logo_base64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGQAAABkCAYAAABw4pVUAAAACXBIWXMAAAsTAAALEwEAmpwYAAAFsGlUWHRYTUw6Y29tLmFkb2JlLnhtcAAAAAAAPD94cGFja2V0IGJlZ2luPSLvu78iIGlkPSJXNU0wTXBDZWhpSHpyZVN6TlRjemtjOWQiPz4gPHg6eG1wbWV0YSB4bWxuczp4PSJhZG9iZTpuczptZXRhLyIgeDp4bXB0az0iQWRvYmUgWE1QIENvcmUgNy4wLWNjMDAgNzkuMTY0NzU2LCAyMDIxLzExLzE1LTEw6jI3OjU5ICAgICAgICAiPiA8cmRmOlJERiB4bWxuczpyZGY9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkvMDIvMjItcmRmLXN5bnRheC1ucyMiPiA8cmRmOkRlc2NyaXB0aW9uIHJkZjphYm91dD0iIiB4bWxuczp4bXA9Imh0dHA6Ly9ucy5hZG9iZS5jb20veGFwLzEuMC8iIHhtbG5zOmRjPSJodHRwOi8vcHVybC5vcmcvZGMvZWxlbWVudHMvMS4xLyIgeG1sbnM6cGhvdG9zaG9wPSJodHRwOi8vbnMuYWRvYmUuY29tL3Bob3Rvc2hvcC8xLjAvIiB4bWxuczp4bXBNTT0iaHR0cDovL25zLmFkb2JlLmNvbS94YXAvMS4wL21tLyIgeG1sbnM6c3RFdnQ9Imh0dHA6Ly9ucy5hZG9iZS5jb20veGFwLzEuMC9zVHlwZS9SZXNvdXJjZUV2ZW50IyIgeG1wOkNyZWF0b3JUb29sPSJBZG9iZSBQaG90b3Nob3AgMjIuNSAoV2luZG93cykiIHhtcDpDcmVhdGVEYXRlPSIyMDIzLTAzLTIwVDA0OjUzOjU5KzA4OjAwIiB4bXA6TW9kaWZ5RGF0ZT0iMjAyMy0wMy0yMFQwNDo1NTozMiswODowMCIgeG1wOk1ldGFkYXRhRGF0ZT0iMjAyMy0wMy0yMFQwNDo1NTozMiswODowMCIgZGM6Zm9ybWF0PSJpbWFnZS9wbmciIHBob3Rvc2hvcDpDb2xvck1vZGU9IjMiIHBob3Rvc2hvcDpJQ0NQcm9maWxlPSJzUkdCIElFQzYxOTY2LTIuMSIgeG1wTU06SW5zdGFuY2VJRD0ieG1wLmlpZDo4Y2U5Y2ZkMC1hNzVhLTQ5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"
     
-    # ── Appearance (Moved to the top) ──
+    st.markdown(f'<img src="{logo_base64}" width="150" style="display:block;margin-left:auto;margin-right:auto;margin-bottom:10px;">', unsafe_allow_html=True)
+    
+    # ── Appearance ──
     st.markdown("---")
     st.markdown("### 🎨 Appearance")
     col_light, col_dark = st.columns(2)
@@ -141,7 +145,7 @@ with st.sidebar:
     st.caption("DepEd Region X – Northern Mindanao")
 
 # ════════════════════════════════════════════════════════════════
-# MAIN CONTENT
+# MAIN CONTENT (same as before)
 # ════════════════════════════════════════════════════════════════
 
 st.markdown(f"## 🎓 SBM Dashboard: {selected_sdo['name']}")
