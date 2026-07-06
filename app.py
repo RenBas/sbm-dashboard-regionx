@@ -25,7 +25,7 @@ from utils.map_helpers import add_sdo_shield, add_school_dot
 from utils.chart_helpers import create_radar_chart, create_trend_chart, create_indicators_table
 
 # ════════════════════════════════════════════════════════════════
-# ✅ FIX 1: CACHE THE DATA – Runs only once!
+# ✅ CACHE DATA LOADING
 # ════════════════════════════════════════════════════════════════
 
 @st.cache_data
@@ -35,7 +35,7 @@ def load_cached_data():
     schools = load_all_schools(sdo_list)
     return sdo_list, schools
 
-# Load data (this runs only once, not on every interaction)
+# Load data (this runs only once)
 sdo_list, schools = load_cached_data()
 
 # ════════════════════════════════════════════════════════════════
@@ -136,16 +136,92 @@ try:
     for school in schools_in_sdo:
         add_school_dot(m, school)
     
-    # ✅ FIX 2: Map renders once and returns data without forcing a full app rebuild
-    # We capture the return data but don't use it (unless we want click events later)
-    map_data = st_folium(m, width=None, height=500, key="sbm_interactive_map")
-    
-    # If you want to use clicks later for auto-zoom, you can access map_data['last_clicked']
+    # Display map
+    st_folium(m, width=None, height=500, key="sbm_map")
     
 except ImportError as e:
     st.error(f"Missing import: {e}. Please run: pip install folium streamlit-folium")
 except Exception as e:
     st.error(f"Map rendering failed: {e}")
+
+# ─── MAP LEGEND ───
+st.markdown("---")
+st.markdown("### 🗺️ Map Legend")
+
+col1, col2, col3 = st.columns([1, 1, 1])
+
+with col1:
+    st.markdown("""
+    **🏫 SDO Shields** (Color = Lowest Dimension Score)
+    <div style="display:flex;align-items:center;gap:8px;margin:4px 0;">
+        <span style="display:inline-block;width:20px;height:20px;background:#0d9488;clip-path:polygon(50% 0%,100% 20%,90% 80%,50% 100%,10% 80%,0% 20%);"></span>
+        <span>2.5 – 3.0 (High)</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;margin:4px 0;">
+        <span style="display:inline-block;width:20px;height:20px;background:#eab308;clip-path:polygon(50% 0%,100% 20%,90% 80%,50% 100%,10% 80%,0% 20%);"></span>
+        <span>2.0 – 2.4 (Medium-High)</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;margin:4px 0;">
+        <span style="display:inline-block;width:20px;height:20px;background:#f97316;clip-path:polygon(50% 0%,100% 20%,90% 80%,50% 100%,10% 80%,0% 20%);"></span>
+        <span>1.0 – 1.9 (Medium-Low)</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;margin:4px 0;">
+        <span style="display:inline-block;width:20px;height:20px;background:#dc2626;clip-path:polygon(50% 0%,100% 20%,90% 80%,50% 100%,10% 80%,0% 20%);"></span>
+        <span>0.0 – 0.9 (Low/Critical)</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;margin:4px 0;font-size:12px;color:#6b7280;">
+        <span style="display:inline-block;width:20px;height:20px;border:2px dashed #dc2626;border-radius:4px;"></span>
+        <span>Urgent (lowest score < 1.0)</span>
+    </div>
+    """, unsafe_allow_html=True)
+
+with col2:
+    st.markdown("""
+    **📍 School Dots** (Color = Overall SBM Level)
+    <div style="display:flex;align-items:center;gap:8px;margin:4px 0;">
+        <span style="display:inline-block;width:16px;height:16px;border-radius:50%;background:#22c55e;"></span>
+        <span>Always Manifested (2.5 – 3.0)</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;margin:4px 0;">
+        <span style="display:inline-block;width:16px;height:16px;border-radius:50%;background:#eab308;"></span>
+        <span>Frequently Manifested (2.0 – 2.4)</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;margin:4px 0;">
+        <span style="display:inline-block;width:16px;height:16px;border-radius:50%;background:#f97316;"></span>
+        <span>Rarely Manifested (1.0 – 1.9)</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;margin:4px 0;">
+        <span style="display:inline-block;width:16px;height:16px;border-radius:50%;background:#9ca3af;"></span>
+        <span>Not Yet Manifested (0.0 – 0.9)</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;margin:4px 0;">
+        <span style="display:inline-block;width:16px;height:16px;border-radius:50%;background:repeating-linear-gradient(45deg, #9ca3af, #9ca3af 3px, #d1d5db 3px, #d1d5db 6px);border:2px solid #6b7280;"></span>
+        <span>Data Pending</span>
+    </div>
+    """, unsafe_allow_html=True)
+
+with col3:
+    st.markdown("""
+    **🔄 Urgency Glow** (Behind SDO Shields)
+    <div style="display:flex;align-items:center;gap:8px;margin:4px 0;">
+        <span style="display:inline-block;width:20px;height:20px;border-radius:50%;background:radial-gradient(circle, #dc2626 30%, transparent 70%);"></span>
+        <span>Critical (score < 1.0)</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;margin:4px 0;">
+        <span style="display:inline-block;width:20px;height:20px;border-radius:50%;background:radial-gradient(circle, #f97316 30%, transparent 70%);"></span>
+        <span>Warning (score 1.0 – 1.9)</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;margin:4px 0;font-size:12px;color:#6b7280;">
+        <span style="display:inline-block;width:20px;height:20px;border-radius:50%;background:radial-gradient(circle, #eab308 30%, transparent 70%);"></span>
+        <span>Monitor (score 2.0 – 2.4)</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;margin:4px 0;font-size:12px;color:#6b7280;">
+        <span style="display:inline-block;width:20px;height:20px;border-radius:50%;background:transparent;border:1px solid #d1d5db;"></span>
+        <span>Stable (score ≥ 2.5)</span>
+    </div>
+    """, unsafe_allow_html=True)
+
+st.caption("💡 Click on any SDO shield to zoom in and view its schools. Hover over markers for more details.")
 
 # ─── BOTTOM TABS ───
 st.markdown("---")
@@ -160,7 +236,7 @@ with tab1:
                 "Score": st.column_config.NumberColumn(format="%.1f"),
             },
             hide_index=True,
-            use_container_width=True
+            width='stretch'  # ✅ Updated from use_container_width
         )
         st.caption(f"* Average across {len(complete_schools)} complete schools in this division")
     else:
@@ -171,25 +247,22 @@ with tab2:
     reg_avgs = compute_dimension_averages(all_complete)
     if any(dim_avgs):
         fig = create_radar_chart(dim_avgs, reg_avgs)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')  # ✅ Updated
     else:
         st.info("No dimension data available for this division.")
 
 with tab3:
     if complete_schools:
-        # This simulation uses random, but since it's inside the tab and only runs
-        # on tab load, it's fine. We keep it as is.
+        random.seed(42)  # Stable randomization
         current_avg = overall_avg
         years = ["2023-2024", "2022-2023", "2021-2022"]
-        # Seed the random to keep it stable-ish, or just let it vary slightly.
-        random.seed(42)  # <-- This makes the trend stable
         values = [
             current_avg,
             round(max(0, min(3, current_avg - 0.2 + (random.random() - 0.5) * 0.4)), 1),
             round(max(0, min(3, current_avg - 0.4 + (random.random() - 0.5) * 0.4)), 1)
         ]
         fig = create_trend_chart(years, values)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')  # ✅ Updated
     else:
         st.info("No historical data available for this division.")
 
