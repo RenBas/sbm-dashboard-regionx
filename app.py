@@ -146,8 +146,14 @@ if not auth_status["logged_in"]:
     
     st.stop()
 
-# ─── USER IS LOGGED IN ───
+# ─── USER INFORMATION ───
 user = st.session_state.user
+
+# ✅ Safeguard: If user is None for any reason, redirect to login
+if user is None:
+    st.warning("Session expired. Please log in again.")
+    st.stop()
+
 role = user.get("role", "school")
 user_name = user.get("name", "User")
 
@@ -330,7 +336,7 @@ except ImportError as e:
 except Exception as e:
     st.error(f"Map rendering failed: {e}")
 
-# ─── MAP LEGEND ───
+# ─── MAP LEGEND WITH FOOTNOTE ───
 st.markdown("---")
 
 st.markdown("""
@@ -360,6 +366,15 @@ st.markdown("""
     <div style="margin-top:8px;font-size:12px;opacity:0.6;">
         The glow pulses faster and brighter for more urgent divisions.
     </div>
+</div>
+""", unsafe_allow_html=True)
+
+# ─── ADD EXPLANATION FOR SCHOOL DOT SIZES ───
+st.markdown("""
+<div style="background-color:var(--secondary-background-color);padding:10px 16px;border-radius:8px;border-left:4px solid #22c55e;margin-bottom:14px;color:var(--text-color);">
+    <b>📏 School Dot Sizes:</b> The size of each school dot represents its <b>total enrollment (number of learners)</b>.
+    Larger dots indicate schools with more students, while smaller dots indicate schools with fewer students.
+    This helps you quickly see which schools have larger student populations.
 </div>
 """, unsafe_allow_html=True)
 
