@@ -99,7 +99,6 @@ def load_cached_data():
 sdo_list, schools = load_cached_data()
 
 # ─── COMPUTE REGIONAL AVERAGE (ALL SCHOOLS IN REGION) ───
-# This is used for the radar chart and division vs regional bar chart
 all_region_complete = [s for s in schools if s["data_status"] != "Pending"]
 if all_region_complete:
     regional_dim_avgs = compute_dimension_averages(all_region_complete)
@@ -162,7 +161,6 @@ if not auth_status["logged_in"]:
 # ─── USER INFORMATION ───
 user = st.session_state.user
 
-# ✅ Safeguard: If user is None for any reason, redirect to login
 if user is None:
     st.warning("Session expired. Please log in again.")
     st.stop()
@@ -170,33 +168,27 @@ if user is None:
 role = user.get("role", "school")
 user_name = user.get("name", "User")
 
-# Filter data based on user role
 filtered_data = get_accessible_schools(user, sdo_list, schools)
 filtered_sdos = filtered_data["filtered_sdos"]
 filtered_schools = filtered_data["filtered_schools"]
 
 # ════════════════════════════════════════════════════════════════
-# DETERMINE SELECTED SDO (BEFORE SIDEBAR)
+# DETERMINE SELECTED SDO
 # ════════════════════════════════════════════════════════════════
 
-# Initialize variables
 selected_sdo = None
 selected_sdo_id = None
 
-# Check if we have a session variable for drill-down
 if "go_to_division" in st.session_state:
     target_div_name = st.session_state.go_to_division
-    # Find the matching SDO
     for sdo in sdo_list:
         if sdo["name"] == target_div_name:
             selected_sdo = sdo
             selected_sdo_id = sdo["id"]
             break
-    # Clear the session variable to avoid loop
     del st.session_state.go_to_division
 
 if selected_sdo is None:
-    # Normal flow
     if is_school_head(user):
         if filtered_schools:
             school = filtered_schools[0]
@@ -211,14 +203,13 @@ if selected_sdo is None:
                 selected_sdo = filtered_sdos[0]
                 selected_sdo_id = selected_sdo["id"]
             else:
-                # Regional: will select via sidebar dropdown
                 selected_sdo = filtered_sdos[0]
                 selected_sdo_id = selected_sdo["id"]
         else:
             st.warning("No divisions accessible.")
             st.stop()
 
-# ─── COMPUTE SCHOOL DATA (for the selected SDO) ───
+# ─── COMPUTE SCHOOL DATA ───
 schools_in_sdo = get_schools_by_sdo(filtered_schools, selected_sdo_id) if selected_sdo_id else []
 complete_schools = [s for s in schools_in_sdo if s["data_status"] != "Pending"]
 dim_avgs = compute_dimension_averages(schools_in_sdo)
@@ -232,7 +223,6 @@ else:
     max_dim_idx = 0
     min_dim_idx = 0
 
-# ─── DETECT DARK MODE ───
 is_dark_mode = (st.session_state.custom_theme == "dark")
 
 # ════════════════════════════════════════════════════════════════
@@ -240,12 +230,10 @@ is_dark_mode = (st.session_state.custom_theme == "dark")
 # ════════════════════════════════════════════════════════════════
 
 with st.sidebar:
-    # ── User Info ──
     st.markdown(f"### 👤 {user_name}")
     st.caption(get_accessible_divisions_summary(user))
     st.markdown("---")
     
-    # ── Appearance ──
     st.markdown("### 🎨 Appearance")
     col_light, col_dark = st.columns(2)
     with col_light:
@@ -259,24 +247,18 @@ with st.sidebar:
             st.session_state.custom_theme = "dark"
             st.rerun()
     
-    # ── Navigation ──
     st.markdown("---")
     st.markdown("### 🗺️ Navigation")
     
-    # Only show division selector if not school head
     if not is_school_head(user):
         if filtered_sdos:
             sdo_names = [s["name"] for s in filtered_sdos]
             if len(sdo_names) == 1:
-                # Division level: auto-selected, just display
                 st.caption(f"📋 {selected_sdo['name']}")
             else:
-                # Regional: dropdown to select division
                 selected_sdo_name = st.selectbox("Select Division", options=sdo_names, index=0)
-                # Update selected_sdo and selected_sdo_id based on selection
                 selected_sdo = next(s for s in filtered_sdos if s["name"] == selected_sdo_name)
                 selected_sdo_id = selected_sdo["id"]
-                # Recompute schools for the new selection
                 schools_in_sdo = get_schools_by_sdo(filtered_schools, selected_sdo_id)
                 complete_schools = [s for s in schools_in_sdo if s["data_status"] != "Pending"]
                 dim_avgs = compute_dimension_averages(schools_in_sdo)
@@ -293,7 +275,6 @@ with st.sidebar:
             selected_sdo = None
             selected_sdo_id = None
     else:
-        # School head: show school name
         if filtered_schools:
             school = filtered_schools[0]
             st.caption(f"🏫 {school['name']}")
@@ -310,11 +291,9 @@ with st.sidebar:
     st.markdown("### 🔍 Search School")
     search_query = st.text_input("Type school name or ID", placeholder="e.g., Central")
     
-    # ── Data Management ──
     st.markdown("---")
     st.markdown("### 📊 Data Management")
     
-    # Download Report Button
     if selected_sdo_id is not None and selected_sdo is not None:
         report_df = generate_report_data(selected_sdo["name"], schools_in_sdo, complete_schools)
         if report_df is not None and not report_df.empty:
@@ -331,7 +310,6 @@ with st.sidebar:
     else:
         st.caption("Select a division to download report.")
     
-    # Download Template Button
     template_df = generate_template_csv()
     csv_template = template_df.to_csv(index=False)
     st.download_button(
@@ -343,18 +321,14 @@ with st.sidebar:
     )
     st.caption("Template based on DepEd Order No. 007, s. 2024")
     
-    # ── Logout ──
     st.markdown("---")
     if st.button("🚪 Logout", use_container_width=True):
         logout()
     
-    # ── Glossary ──
     with st.expander("📖 Glossary", expanded=False):
         st.markdown("""
         **SBM (School-Based Management)** – Decentralization of decision-making authority to schools.
-
         **SDO (Schools Division Office)** – Local DepEd office overseeing schools in a division.
-
         **SBM Dimensions** – Six key areas of school operations:
         - Curriculum & Teaching
         - Learning Environment
@@ -362,17 +336,13 @@ with st.sidebar:
         - Governance & Accountability
         - Human Resource & Team Development
         - Finance & Resource Management
-
         **SBM Indicators** – 42 measurable practices and outcomes.
-
         **Degree of Manifestation** – Scale (0–3):
         - 0.0–0.9 = Not Yet Manifested
         - 1.0–1.9 = Rarely Manifested
         - 2.0–2.4 = Frequently Manifested
         - 2.5–3.0 = Always Manifested
-
-        **Urgency Factor** – 0–1 value indicating how urgent it is to address a division's lowest dimension.
-
+        **Urgency Factor** – 0–1 value indicating urgency.
         **Glow** – Animated pulsing behind SDO shields:
         - 🔴 Red = Critical (< 1.0)
         - 🟠 Orange = Warning (1.0–1.9)
@@ -408,10 +378,7 @@ with col3:
 with col4:
     st.metric("⬇️ Lowest Dimension (Urgent)", DIMENSION_NAMES[min_dim_idx] if overall_avg > 0 else "—", delta_color="inverse")
 
-# ─── SYNOPSIS SECTION ───
-st.markdown("---")
-
-# Generate synopsis based on user role and data
+# ─── SYNOPSIS ───
 synopsis_html = generate_synopsis(
     user_role=role,
     user_name=user_name,
@@ -562,7 +529,6 @@ elif role == "division":
             paper_bgcolor='rgba(0,0,0,0)'
         )
         
-        # Add annotation for difference
         diff = overall_avg - regional_overall_avg
         if diff > 0:
             diff_text = f"📈 Division is {diff:.1f} points above regional average"
@@ -599,7 +565,6 @@ elif role == "division":
         dist_df = pd.DataFrame(dist_data)
         st.dataframe(dist_df, width='stretch', hide_index=True)
         
-        # ─── Bar chart ───
         fig2 = go.Figure()
         for level, color in [("Strong (≥2.5)", "#22c55e"), ("Moderate (2.0-2.4)", "#eab308"), ("Weak (<2.0)", "#dc2626")]:
             fig2.add_trace(go.Bar(
@@ -619,10 +584,9 @@ elif role == "division":
         )
         st.plotly_chart(fig2, width='stretch')
         
-        # ─── Paginated, searchable table with one decimal ───
+        # ─── Paginated, searchable table ───
         st.markdown("#### 📋 School List")
         
-        # Build table data with rounding
         school_rows = []
         for s in schools_in_sdo:
             if s["data_status"] == "Pending":
@@ -646,16 +610,13 @@ elif role == "division":
             })
         table_df = pd.DataFrame(school_rows)
         
-        # Filter by search query (if any)
         if search_query:
             filtered_table = table_df[table_df["School"].str.contains(search_query, case=False, na=False)]
         else:
             filtered_table = table_df
         
-        # Drop School ID for display
         display_df = filtered_table.drop(columns=["School ID"])
         
-        # Pagination
         page_size = 20
         total_rows = len(display_df)
         total_pages = max(1, (total_rows + page_size - 1) // page_size)
@@ -663,7 +624,6 @@ elif role == "division":
         if "school_page" not in st.session_state:
             st.session_state.school_page = 1
         
-        # Page navigation
         if total_pages > 1:
             cols = st.columns([1, 3, 1])
             with cols[0]:
@@ -681,7 +641,6 @@ elif role == "division":
         end_idx = min(start_idx + page_size, total_rows)
         page_df = display_df.iloc[start_idx:end_idx].copy()
         
-        # Ensure numeric columns are float and rounded to 1 decimal
         numeric_cols = ["Overall SBM Index", "Curriculum & Teaching", "Learning Environment", 
                         "Leadership", "Governance & Accountability", "HR & Team Development", 
                         "Finance & Resource Mgmt."]
@@ -736,7 +695,10 @@ else:
     """
     st_html(wrapped_html, height=900, scrolling=True)
 
-# ─── MAP ───
+# ════════════════════════════════════════════════════════════════
+# 🗺️ MAP – NOW ONLY RENDERED ONCE, BELOW THE TABS
+# ════════════════════════════════════════════════════════════════
+
 st.markdown("---")
 
 try:
@@ -892,7 +854,6 @@ with tab1:
         st.info("No complete SBM data available for this division.")
 
 with tab2:
-    # ✅ FIXED: Use regional_dim_avgs (computed from ALL schools in the region)
     if any(dim_avgs) and any(regional_dim_avgs):
         fig = create_radar_chart(dim_avgs, regional_dim_avgs)
         st.plotly_chart(fig, width='stretch')
