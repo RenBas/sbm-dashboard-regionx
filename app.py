@@ -2,7 +2,6 @@
 
 import streamlit as st
 import random
-from datetime import datetime
 
 # ─── PAGE CONFIG ───
 st.set_page_config(
@@ -84,6 +83,7 @@ from utils.auth import (
     get_accessible_divisions_summary, is_school_head
 )
 from utils.download_helpers import generate_report_data, generate_template_csv
+from utils.synopsis_generator import generate_synopsis
 
 # ════════════════════════════════════════════════════════════════
 # ✅ CACHE DATA LOADING
@@ -211,9 +211,6 @@ else:
     overall_avg = 0
     max_dim_idx = 0
     min_dim_idx = 0
-
-# ─── DETECT DARK MODE ───
-is_dark_mode = (st.session_state.custom_theme == "dark")
 
 # ════════════════════════════════════════════════════════════════
 # SIDEBAR
@@ -388,211 +385,34 @@ with col3:
 with col4:
     st.metric("⬇️ Lowest Dimension (Urgent)", DIMENSION_NAMES[min_dim_idx] if overall_avg > 0 else "—", delta_color="inverse")
 
-# ─── SYNOPSIS SECTION (Native Streamlit Components) ───
+# ─── SYNOPSIS SECTION ───
 st.markdown("---")
-st.markdown("### 📋 Executive Summary")
 
-# Determine colors based on theme
-if is_dark_mode:
-    card_bg = "#1A1C23"
-    strong_bg = "#1A3A2A"
-    weak_bg = "#3A1A1A"
-    analysis_bg = "#1A1C23"
-    intervention_bg = "#2A2A1A"
-    priority_bg = "#1A2A3A"
-    text_color = "#FAFAFA"
-    text_secondary = "#B0B0B0"
-    border_color = "#2A2C33"
-    strong_color = "#22c55e"
-    weak_color = "#dc2626"
-    shadow = "rgba(0,0,0,0.3)"
-else:
-    card_bg = "#FFFFFF"
-    strong_bg = "#f0fdf4"
-    weak_bg = "#fef2f2"
-    analysis_bg = "#FFFFFF"
-    intervention_bg = "#fffbeb"
-    priority_bg = "#f0f4ff"
-    text_color = "#1A1A2E"
-    text_secondary = "#4B5563"
-    border_color = "#E5E7EB"
-    strong_color = "#166534"
-    weak_color = "#991B1B"
-    shadow = "rgba(0,0,0,0.05)"
+# Generate synopsis based on user role and data
+synopsis_html = generate_synopsis(
+    user_role=role,
+    user_name=user_name,
+    selected_sdo=selected_sdo,
+    schools_in_sdo=schools_in_sdo,
+    complete_schools=complete_schools,
+    dim_avgs=dim_avgs,
+    overall_avg=overall_avg,
+    max_dim_idx=max_dim_idx,
+    min_dim_idx=min_dim_idx
+)
 
-# Get dimension names
-strongest_dim = DIMENSION_NAMES[max_dim_idx]
-weakest_dim = DIMENSION_NAMES[min_dim_idx]
-strongest_score = dim_avgs[max_dim_idx]
-weakest_score = dim_avgs[min_dim_idx]
-total_schools = len(schools_in_sdo)
-pending_count = len(schools_in_sdo) - len(complete_schools)
-current_date = datetime.now().strftime('%B %d, %Y')
+# ─── RENDER SYNOPSIS USING st.components.v1.html ───
+from streamlit.components.v1 import html as st_html
 
-# Determine overall level
-if overall_avg >= 2.5:
-    overall_level = "High"
-    overall_color = "#22c55e"
-elif overall_avg >= 2.0:
-    overall_level = "Medium-High"
-    overall_color = "#eab308"
-elif overall_avg >= 1.0:
-    overall_level = "Medium-Low"
-    overall_color = "#f97316"
-else:
-    overall_level = "Low"
-    overall_color = "#dc2626"
-
-# Urgency level
-if weakest_score < 1.0:
-    urgency_level = "Critical"
-    urgency_color = "#dc2626"
-elif weakest_score < 2.0:
-    urgency_level = "Warning"
-    urgency_color = "#f97316"
-elif weakest_score < 2.5:
-    urgency_level = "Monitor"
-    urgency_color = "#eab308"
-else:
-    urgency_level = "Stable"
-    urgency_color = "#22c55e"
-
-# ─── User Info ───
-st.markdown(f"""
-<div style="background:{card_bg};padding:12px 16px;border-radius:8px;border:1px solid {border_color};margin-bottom:16px;color:{text_color};">
-    <b>Prepared for:</b> {user_name} · 
-    <b>Division:</b> {selected_sdo['name']} · 
-    <b>Date:</b> {current_date}
+# Wrap the HTML in a div with proper styling to avoid any interference
+wrapped_html = f"""
+<div style="width:100%;padding:0;margin:0;box-sizing:border-box;">
+    {synopsis_html}
 </div>
-""", unsafe_allow_html=True)
+"""
 
-# ─── Summary Cards ───
-if role == "regional":
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.markdown(f"""
-        <div style="background:{card_bg};padding:16px;border-radius:8px;text-align:center;border:1px solid {border_color};">
-            <div style="font-size:28px;font-weight:700;color:{text_color};">14</div>
-            <div style="font-size:13px;color:{text_secondary};">Total Divisions</div>
-        </div>
-        """, unsafe_allow_html=True)
-    with col2:
-        st.markdown(f"""
-        <div style="background:{card_bg};padding:16px;border-radius:8px;text-align:center;border:1px solid {border_color};">
-            <div style="font-size:28px;font-weight:700;color:{overall_color};">{overall_avg:.1f}</div>
-            <div style="font-size:13px;color:{text_secondary};">Division SBM Index</div>
-            <div style="font-size:12px;color:{overall_color};">{overall_level}</div>
-        </div>
-        """, unsafe_allow_html=True)
-    with col3:
-        st.markdown(f"""
-        <div style="background:{card_bg};padding:16px;border-radius:8px;text-align:center;border:1px solid {border_color};">
-            <div style="font-size:28px;font-weight:700;color:{urgency_color};">{urgency_level}</div>
-            <div style="font-size:13px;color:{text_secondary};">Urgency Level</div>
-            <div style="font-size:12px;color:{urgency_color};">{weakest_dim} ({weakest_score:.1f})</div>
-        </div>
-        """, unsafe_allow_html=True)
-elif role == "division":
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.markdown(f"""
-        <div style="background:{card_bg};padding:16px;border-radius:8px;text-align:center;border:1px solid {border_color};">
-            <div style="font-size:28px;font-weight:700;color:{text_color};">{total_schools}</div>
-            <div style="font-size:13px;color:{text_secondary};">Total Schools</div>
-        </div>
-        """, unsafe_allow_html=True)
-    with col2:
-        st.markdown(f"""
-        <div style="background:{card_bg};padding:16px;border-radius:8px;text-align:center;border:1px solid {border_color};">
-            <div style="font-size:28px;font-weight:700;color:{overall_color};">{overall_avg:.1f}</div>
-            <div style="font-size:13px;color:{text_secondary};">Division SBM Index</div>
-            <div style="font-size:12px;color:{overall_color};">{overall_level}</div>
-        </div>
-        """, unsafe_allow_html=True)
-    with col3:
-        st.markdown(f"""
-        <div style="background:{card_bg};padding:16px;border-radius:8px;text-align:center;border:1px solid {border_color};">
-            <div style="font-size:28px;font-weight:700;color:{urgency_color};">{pending_count}</div>
-            <div style="font-size:13px;color:{text_secondary};">Schools with Pending Data</div>
-        </div>
-        """, unsafe_allow_html=True)
-else:  # school
-    school = schools_in_sdo[0] if schools_in_sdo else None
-    school_name = school["name"] if school else "Your School"
-    st.markdown(f"""
-    <div style="background:{card_bg};padding:16px;border-radius:8px;border:1px solid {border_color};margin-bottom:12px;">
-        <div style="font-size:18px;font-weight:600;color:{text_color};">🏫 {school_name}</div>
-        <div style="display:flex;gap:24px;margin-top:8px;flex-wrap:wrap;">
-            <span><b>Overall SBM Index:</b> <span style="color:{overall_color};">{overall_avg:.1f} / 3.0</span></span>
-            <span><b>Performance Level:</b> <span style="color:{overall_color};">{overall_level}</span></span>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-# ─── Strongest & Weakest Dimensions ───
-col1, col2 = st.columns(2)
-with col1:
-    st.markdown(f"""
-    <div style="background:{strong_bg};padding:14px 18px;border-radius:8px;border-left:4px solid #22c55e;height:100%;">
-        <h4 style="margin:0 0 6px 0;color:{strong_color};">✅ Strongest Dimension</h4>
-        <p style="font-size:18px;font-weight:700;margin:0;color:{strong_color};">{strongest_dim}</p>
-        <p style="font-size:14px;margin:4px 0 0 0;color:{text_secondary};">Score: <b>{strongest_score:.1f}</b> / 3.0</p>
-    </div>
-    """, unsafe_allow_html=True)
-with col2:
-    st.markdown(f"""
-    <div style="background:{weak_bg};padding:14px 18px;border-radius:8px;border-left:4px solid #dc2626;height:100%;">
-        <h4 style="margin:0 0 6px 0;color:{weak_color};">⚠️ Weakest Dimension</h4>
-        <p style="font-size:18px;font-weight:700;margin:0;color:{weak_color};">{weakest_dim}</p>
-        <p style="font-size:14px;margin:4px 0 0 0;color:{text_secondary};">Score: <b>{weakest_score:.1f}</b> / 3.0</p>
-    </div>
-    """, unsafe_allow_html=True)
-
-# ─── Analysis ───
-st.markdown(f"""
-<div style="background:{analysis_bg};padding:16px 20px;border-radius:8px;border:1px solid {border_color};margin:12px 0;">
-    <h4 style="margin-top:0;color:{text_color};">💡 Strategic Analysis</h4>
-    <p style="font-size:14px;color:{text_secondary};">
-        <b>{weakest_dim}</b> is the weakest dimension{' regionally' if role=='regional' else ' across the division' if role=='division' else ''}. 
-        This requires {'urgent regional-level intervention' if role=='regional' else 'division-wide attention'} and coordinated support.
-        <br><br>
-        <b>{strongest_dim}</b> is the{' region\'s' if role=='regional' else ' division\'s' if role=='division' else ''} strength. 
-        Document and share best practices{' across all divisions' if role=='regional' else ' across schools' if role=='division' else ''}.
-    </p>
-</div>
-""", unsafe_allow_html=True)
-
-# ─── Interventions ───
-st.markdown(f"""
-<div style="background:{intervention_bg};padding:16px 20px;border-radius:8px;border:1px solid #fcd34d;margin:12px 0;">
-    <h4 style="margin-top:0;color:#92400e;">🎯 Recommended Interventions</h4>
-    <ul style="font-size:14px;color:{text_secondary};padding-left:20px;margin:4px 0;">
-        <li><b>{'Immediate' if role=='school' else 'Short-Term (0-6 Months)' if role=='regional' else 'Urgent'}:</b> 
-        {'Conduct focused assessment and capacity building for ' + weakest_dim if role=='school' else 
-         'Deploy Regional Field Technical Assistance Team (RFTAT) to priority divisions' if role=='regional' else 
-         'Deploy division TA team to schools struggling with ' + weakest_dim}</li>
-        <li><b>{'Short-Term' if role=='school' else 'Medium-Term (6-12 Months)' if role=='regional' else 'Short-Term'}:</b> 
-        {'Develop an improvement plan with specific, measurable targets' if role=='school' else 
-         'Establish Regional SBM Monitoring and Evaluation System' if role=='regional' else 
-         'Conduct division-wide training for ' + weakest_dim}</li>
-        <li><b>{'Medium-Term' if role=='school' else 'Long-Term (12+ Months)' if role=='regional' else 'Medium-Term'}:</b> 
-        {'Implement interventions and monitor progress regularly' if role=='school' else 
-         'Integrate SBM improvement into Regional Education Development Plan' if role=='regional' else 
-         'Establish regular monitoring and reporting mechanisms'}</li>
-        <li><b>{'Sustain' if role=='school' else 'Sustain & Scale Up'}:</b> 
-        {'Maintain and enhance performance in ' + strongest_dim if role=='school' else 
-         'Document and scale up best practices across all divisions' if role=='regional' else 
-         'Scale up best practices from ' + strongest_dim + ' across all schools'}</li>
-    </ul>
-</div>
-""", unsafe_allow_html=True)
-
-# ─── Footer ───
-st.markdown(f"""
-<div style="text-align:right;font-size:12px;color:{text_secondary};margin-top:8px;">
-    <i>Based on current SBM data. For {'school' if role=='school' else 'division' if role=='division' else 'regional'}-level planning and decision-making.</i>
-</div>
-""", unsafe_allow_html=True)
+# Render using components – guaranteed to render raw HTML
+st_html(wrapped_html, height=900, scrolling=True)
 
 # ─── MAP ───
 st.markdown("---")
