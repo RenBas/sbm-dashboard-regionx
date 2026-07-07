@@ -173,33 +173,42 @@ filtered_schools = filtered_data["filtered_schools"]
 selected_sdo = None
 selected_sdo_id = None
 
-if is_school_head(user):
-    # School head: auto-select their school's SDO
-    if filtered_schools:
-        school = filtered_schools[0]
-        selected_sdo = next((s for s in sdo_list if s["id"] == school["sdo_id"]), None)
-        selected_sdo_id = selected_sdo["id"] if selected_sdo else None
-    else:
-        st.warning("No school data available for your account.")
-        st.stop()
-else:
-    # Division or Regional: we need to choose one division
-    if filtered_sdos:
-        # If only one division (division level), auto-select it
-        if len(filtered_sdos) == 1:
-            selected_sdo = filtered_sdos[0]
-            selected_sdo_id = selected_sdo["id"]
+# Check if we have a session variable for drill-down
+if "go_to_division" in st.session_state:
+    target_div_name = st.session_state.go_to_division
+    # Find the matching SDO
+    for sdo in sdo_list:
+        if sdo["name"] == target_div_name:
+            selected_sdo = sdo
+            selected_sdo_id = sdo["id"]
+            break
+    # Clear the session variable to avoid loop
+    del st.session_state.go_to_division
+
+if selected_sdo is None:
+    # Normal flow
+    if is_school_head(user):
+        if filtered_schools:
+            school = filtered_schools[0]
+            selected_sdo = next((s for s in sdo_list if s["id"] == school["sdo_id"]), None)
+            selected_sdo_id = selected_sdo["id"] if selected_sdo else None
         else:
-            # Regional: will select via sidebar dropdown
-            # We'll set a default (first in list) but sidebar will override
-            selected_sdo = filtered_sdos[0]
-            selected_sdo_id = selected_sdo["id"]
+            st.warning("No school data available for your account.")
+            st.stop()
     else:
-        st.warning("No divisions accessible.")
-        st.stop()
+        if filtered_sdos:
+            if len(filtered_sdos) == 1:
+                selected_sdo = filtered_sdos[0]
+                selected_sdo_id = selected_sdo["id"]
+            else:
+                # Regional: will select via sidebar dropdown
+                selected_sdo = filtered_sdos[0]
+                selected_sdo_id = selected_sdo["id"]
+        else:
+            st.warning("No divisions accessible.")
+            st.stop()
 
 # ─── COMPUTE SCHOOL DATA (for the selected SDO) ───
-# This must be done before sidebar because download buttons and synopsis use it.
 schools_in_sdo = get_schools_by_sdo(filtered_schools, selected_sdo_id) if selected_sdo_id else []
 complete_schools = [s for s in schools_in_sdo if s["data_status"] != "Pending"]
 dim_avgs = compute_dimension_averages(schools_in_sdo)
@@ -410,7 +419,6 @@ if role == "regional":
     tab1, tab2 = st.tabs(["📋 Executive Summary", "📊 Division Performance Matrix"])
     
     with tab1:
-        # Render executive summary (using components.html)
         from streamlit.components.v1 import html as st_html
         wrapped_html = f"""
         <div style="width:100%;padding:0;margin:0;box-sizing:border-box;">
@@ -446,7 +454,7 @@ if role == "regional":
             avg_row[dim] = df[dim].mean()
         df = pd.concat([df, pd.DataFrame([avg_row])], ignore_index=True)
         
-        # Define color mapping function for styling
+        # Define color mapping function
         def color_cell(val):
             if pd.isna(val):
                 return ''
@@ -457,11 +465,13 @@ if role == "regional":
             else:
                 return 'background-color: #dc2626; color: white; font-weight: bold;'
         
-        # Apply styling
-        styled_df = df.style.map(color_cell, subset=df.columns[1:])
+        # Apply styling and convert to HTML
+        styled_df = df.style.applymap(color_cell, subset=df.columns[1:])
+        # Convert to HTML
+        html_table = styled_df.to_html(index=False, escape=False)
         
-        # Display the matrix
-        st.dataframe(styled_df, use_container_width=True, height=600)
+        # Display with markdown (using inline styling to match theme)
+        st.markdown(html_table, unsafe_allow_html=True)
         
         # Legend
         st.markdown("""
@@ -487,7 +497,7 @@ if role == "regional":
                 "Weak (<2.0)": weak
             })
         summary_df = pd.DataFrame(summary_data)
-        st.dataframe(summary_df, use_container_width=True, hide_index=True)
+        st.dataframe(summary_df, width='stretch', hide_index=True)
         
         # ─── Drill-down: Jump to Division ───
         st.markdown("### 🔍 Jump to Division")
@@ -497,30 +507,8 @@ if role == "regional":
             selected_div_name = st.selectbox("Select a division to view its detailed dashboard:", division_names)
         with col_btn:
             if st.button("🚀 Go to Division", use_container_width=True):
-                # Update session state to select this division and rerun
-                st.session_state.selected_sdo_name = selected_div_name
-                # We need to set the sidebar selection to this division.
-                # Since the sidebar uses a selectbox, we need to set its value.
-                # We can use query parameters or store in session.
-                # Simpler: we can set a session variable and then rerun, but the selectbox won't reflect.
-                # Alternative: we can use st.query_params to pass the division name.
-                # Let's use st.query_params for navigation.
-                st.query_params["division"] = selected_div_name
-                st.rerun()
-        
-        # Check if a division was selected via query_params
-        if "division" in st.query_params:
-            div_name = st.query_params["division"]
-            # Find the division and set it as selected
-            matching_sdo = next((s for s in sdo_list if s["name"] == div_name), None)
-            if matching_sdo:
-                # Update sidebar selection by setting session state
-                # We'll need to update the selectbox in the sidebar.
-                # Since the sidebar selectbox is not directly accessible, we can use session state.
-                # We'll store the selected division name and rerun to update the sidebar.
-                st.session_state.sidebar_selection = div_name
-                # Clear query param to avoid loop
-                st.query_params.clear()
+                # Set session variable and rerun
+                st.session_state.go_to_division = selected_div_name
                 st.rerun()
 else:
     # Non-regional: just display the synopsis as before (no tabs)
