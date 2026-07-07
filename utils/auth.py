@@ -27,6 +27,7 @@ ROLES = {
 
 # ─── MOCK USER DATA (Replace with real authentication later) ───
 MOCK_USERS = {
+    # ── Regional Level ──
     "regional": {
         "username": "regional",
         "password": "regional123",
@@ -35,6 +36,8 @@ MOCK_USERS = {
         "division": None,
         "school_id": None
     },
+    
+    # ── Division Level ──
     "sdo_bukidnon": {
         "username": "sdo_bukidnon",
         "password": "sdo123",
@@ -59,8 +62,26 @@ MOCK_USERS = {
         "division": "SDO Misamis Occidental",
         "school_id": None
     },
+    "sdo_iligan": {
+        "username": "sdo_iligan",
+        "password": "sdo123",
+        "role": "division",
+        "name": "SDO Iligan City Superintendent",
+        "division": "SDO Iligan City",
+        "school_id": None
+    },
+    "sdo_valencia": {
+        "username": "sdo_valencia",
+        "password": "sdo123",
+        "role": "division",
+        "name": "SDO Valencia City Superintendent",
+        "division": "SDO Valencia City",
+        "school_id": None
+    },
+    
+    # ── School Head Level ──
     "principal_cdo_nhs": {
-        "username": "principal_cdo",
+        "username": "principal_cdo_nhs",
         "password": "school123",
         "role": "school",
         "name": "Principal, CDO National High School",
@@ -68,12 +89,44 @@ MOCK_USERS = {
         "school_id": "12001"  # Mock school ID
     },
     "principal_bukidnon_es": {
-        "username": "principal_bukidnon",
+        "username": "principal_bukidnon_es",
         "password": "school123",
         "role": "school",
-        "name": "Principal, Bukidnon Central Elementary School",
+        "name": "Principal, Bukidnon Central ES",
         "division": None,
         "school_id": "11001"
+    },
+    "principal_ozamiz_nhs": {
+        "username": "principal_ozamiz_nhs",
+        "password": "school123",
+        "role": "school",
+        "name": "Principal, Ozamiz City NHS",
+        "division": None,
+        "school_id": "13001"
+    },
+    "principal_iligan_nhs": {
+        "username": "principal_iligan_nhs",
+        "password": "school123",
+        "role": "school",
+        "name": "Principal, Iligan City NHS",
+        "division": None,
+        "school_id": "14001"
+    },
+    "principal_valencia_es": {
+        "username": "principal_valencia_es",
+        "password": "school123",
+        "role": "school",
+        "name": "Principal, Valencia Central ES",
+        "division": None,
+        "school_id": "15001"
+    },
+    "principal_misamis_occ_nhs": {
+        "username": "principal_misamis_occ_nhs",
+        "password": "school123",
+        "role": "school",
+        "name": "Principal, Misamis Occidental NHS",
+        "division": None,
+        "school_id": "16001"
     }
 }
 
@@ -84,9 +137,21 @@ def authenticate(username: str, password: str) -> Optional[Dict]:
     Authenticate a user against mock user data.
     Returns user dict if valid, None otherwise.
     """
+    # Debug: print attempted login
+    print(f"🔐 Login attempt: username='{username}', password='{password}'")
+    
     user = MOCK_USERS.get(username)
     if user and user["password"] == password:
+        print(f"✅ Login successful: {username}")
         return {k: v for k, v in user.items() if k != "password"}
+    
+    # Check for exact matches (case-insensitive fallback)
+    for key, value in MOCK_USERS.items():
+        if value["username"].lower() == username.lower() and value["password"] == password:
+            print(f"✅ Login successful (case-insensitive): {username}")
+            return {k: v for k, v in value.items() if k != "password"}
+    
+    print(f"❌ Login failed: {username}")
     return None
 
 def get_user_role(user: Dict) -> str:
@@ -170,7 +235,6 @@ def get_accessible_sdo_names(user: Dict, sdo_list: List) -> List[str]:
         division = get_user_division(user)
         return [division] if division else []
     elif role == "school":
-        # School heads don't see SDO selectors; they get auto-selected
         return []
     return []
 
