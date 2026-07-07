@@ -405,18 +405,41 @@ synopsis_html = generate_synopsis(
     is_dark_mode=is_dark_mode
 )
 
-# ─── RENDER SYNOPSIS USING st.components.v1.html ───
-from streamlit.components.v1 import html as st_html
+# ─── WRAP SYNOPSIS WITH FULL HTML DOCUMENT FOR IFRAME ───
+bg_color = "#0E1117" if is_dark_mode else "#FFFFFF"
+text_color = "#FAFAFA" if is_dark_mode else "#1A1A2E"
 
-# Wrap the HTML in a div with proper styling to avoid any interference
-wrapped_html = f"""
-<div style="width:100%;padding:0;margin:0;box-sizing:border-box;">
-    {synopsis_html}
-</div>
+full_html = f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body {{
+            margin: 0;
+            padding: 0;
+            background-color: {bg_color};
+            color: {text_color};
+            font-family: 'Segoe UI', Roboto, sans-serif;
+        }}
+        .synopsis-container {{
+            padding: 10px;
+            max-width: 100%;
+            box-sizing: border-box;
+        }}
+    </style>
+</head>
+<body>
+    <div class="synopsis-container">
+        {synopsis_html}
+    </div>
+</body>
+</html>
 """
 
-# Render using components – guaranteed to render raw HTML
-st_html(wrapped_html, height=900, scrolling=True)
+# ─── RENDER SYNOPSIS USING st.components.v1.html ───
+from streamlit.components.v1 import html as st_html
+st_html(full_html, height=900, scrolling=True)
 
 # ─── MAP ───
 st.markdown("---")
