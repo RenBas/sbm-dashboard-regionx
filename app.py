@@ -429,12 +429,12 @@ if role == "regional":
     
     with tab2:
         st.markdown("### 📊 Division Performance Matrix")
-        st.caption("Performance of all 14 divisions across the 6 SBM dimensions.")
+        st.caption("Performance of all 14 divisions across the 6 SBM dimensions. Scores are rounded to 1 decimal place.")
         
-        # Build matrix data
+        # Build matrix data with rounding to 1 decimal
         matrix_data = []
         for sdo in sdo_list:
-            dim_scores = sdo["dimension_scores"]
+            dim_scores = [round(x, 1) for x in sdo["dimension_scores"]]
             row = {
                 "Division": sdo["name"].replace("SDO ", ""),
                 "Curriculum & Teaching": dim_scores[0],
@@ -448,10 +448,10 @@ if role == "regional":
         
         df = pd.DataFrame(matrix_data)
         
-        # Add summary row (regional average)
+        # Add summary row (regional average) rounded to 1 decimal
         avg_row = {"Division": "📊 REGIONAL AVERAGE"}
         for dim in df.columns[1:]:
-            avg_row[dim] = df[dim].mean()
+            avg_row[dim] = round(df[dim].mean(), 1)
         df = pd.concat([df, pd.DataFrame([avg_row])], ignore_index=True)
         
         # Define color mapping function
@@ -465,7 +465,7 @@ if role == "regional":
             else:
                 return 'background-color: #dc2626; color: white; font-weight: bold;'
         
-        # Apply styling using map (not applymap – fixed for newer pandas)
+        # Apply styling and convert to HTML
         styled_df = df.style.map(color_cell, subset=df.columns[1:])
         html_table = styled_df.to_html(index=False, escape=False)
         
