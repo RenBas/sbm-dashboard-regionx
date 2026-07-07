@@ -27,7 +27,6 @@ ROLES = {
 
 # ─── MOCK USER DATA ───
 MOCK_USERS = {
-    # ── Regional ──
     "regional": {
         "username": "regional",
         "password": "regional123",
@@ -36,7 +35,6 @@ MOCK_USERS = {
         "division": None,
         "school_id": None
     },
-    # ── Division ──
     "sdo_bukidnon": {
         "username": "sdo_bukidnon",
         "password": "sdo123",
@@ -77,8 +75,7 @@ MOCK_USERS = {
         "division": "SDO Valencia City",
         "school_id": None
     },
-    # ── School Heads ──
-    "principal_cdo": {  # ✅ Added the username you tried
+    "principal_cdo": {
         "username": "principal_cdo",
         "password": "school123",
         "role": "school",
@@ -131,7 +128,6 @@ MOCK_USERS = {
 # ─── AUTHENTICATION FUNCTIONS ───
 
 def authenticate(username: str, password: str) -> Optional[Dict]:
-    """Authenticate a user against mock user data."""
     user = MOCK_USERS.get(username)
     if user and user["password"] == password:
         return {k: v for k, v in user.items() if k != "password"}
@@ -187,7 +183,8 @@ def get_accessible_divisions_summary(user: Dict) -> str:
     return "🔒 Access level unknown."
 
 def login_status() -> Dict:
-    if "user" not in st.session_state:
+    # ✅ Fix: treat None as not logged in
+    if "user" not in st.session_state or st.session_state.user is None:
         return {"logged_in": False, "user": None}
     return {"logged_in": True, "user": st.session_state.user}
 
