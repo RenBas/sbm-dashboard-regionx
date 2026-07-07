@@ -2,6 +2,7 @@
 
 import streamlit as st
 import random
+from datetime import datetime
 
 # ─── PAGE CONFIG ───
 st.set_page_config(
@@ -83,7 +84,6 @@ from utils.auth import (
     get_accessible_divisions_summary, is_school_head
 )
 from utils.download_helpers import generate_report_data, generate_template_csv
-from utils.synopsis_generator import generate_synopsis
 
 # ════════════════════════════════════════════════════════════════
 # ✅ CACHE DATA LOADING
@@ -391,24 +391,233 @@ with col4:
 # ─── SYNOPSIS SECTION ───
 st.markdown("---")
 
-# Generate synopsis with dark mode awareness
-synopsis_html = generate_synopsis(
-    user_role=role,
-    user_name=user_name,
-    selected_sdo=selected_sdo,
-    schools_in_sdo=schools_in_sdo,
-    complete_schools=complete_schools,
-    dim_avgs=dim_avgs,
-    overall_avg=overall_avg,
-    max_dim_idx=max_dim_idx,
-    min_dim_idx=min_dim_idx,
-    is_dark_mode=is_dark_mode
-)
+# ---- Build synopsis HTML directly here ----
+# Determine theme colors
+if is_dark_mode:
+    bg_main = "#0E1117"
+    bg_card = "#1A1C23"
+    bg_strong = "#1A3A2A"
+    bg_weak = "#3A1A1A"
+    bg_analysis = "#1A1C23"
+    bg_interventions = "#2A2A1A"
+    bg_priority = "#1A2A3A"
+    text_main = "#FAFAFA"
+    text_secondary = "#B0B0B0"
+    text_muted = "#9CA3AF"
+    border_light = "#2A2C33"
+    border_strong = "#166534"
+    border_weak = "#991B1B"
+    gradient_start = "#1A1C23"
+    gradient_end = "#262730"
+    shadow = "rgba(255,255,255,0.05)"
+else:
+    bg_main = "#FFFFFF"
+    bg_card = "#FFFFFF"
+    bg_strong = "#f0fdf4"
+    bg_weak = "#fef2f2"
+    bg_analysis = "#FFFFFF"
+    bg_interventions = "#fffbeb"
+    bg_priority = "#f0f4ff"
+    text_main = "#1A1A2E"
+    text_secondary = "#4B5563"
+    text_muted = "#6B7280"
+    border_light = "#E5E7EB"
+    border_strong = "#166534"
+    border_weak = "#991B1B"
+    gradient_start = "#f0f4ff"
+    gradient_end = "#e8eeff"
+    shadow = "rgba(0,0,0,0.05)"
 
-# ─── WRAP SYNOPSIS WITH FULL HTML DOCUMENT FOR IFRAME ───
-bg_color = "#0E1117" if is_dark_mode else "#FFFFFF"
-text_color = "#FAFAFA" if is_dark_mode else "#1A1A2E"
+strongest_dim = DIMENSION_NAMES[max_dim_idx]
+weakest_dim = DIMENSION_NAMES[min_dim_idx]
+strongest_score = dim_avgs[max_dim_idx]
+weakest_score = dim_avgs[min_dim_idx]
+total_schools = len(schools_in_sdo)
+pending_count = len(schools_in_sdo) - len(complete_schools)
+current_date = datetime.now().strftime('%B %d, %Y')
 
+# Determine overall level
+if overall_avg >= 2.5:
+    overall_level = "High"
+    overall_color = "#22c55e"
+    overall_emoji = "🟢"
+elif overall_avg >= 2.0:
+    overall_level = "Medium-High"
+    overall_color = "#eab308"
+    overall_emoji = "🟡"
+elif overall_avg >= 1.0:
+    overall_level = "Medium-Low"
+    overall_color = "#f97316"
+    overall_emoji = "🟠"
+else:
+    overall_level = "Low"
+    overall_color = "#dc2626"
+    overall_emoji = "🔴"
+
+# Urgency level
+if weakest_score < 1.0:
+    urgency_level = "Critical"
+    urgency_color = "#dc2626"
+    urgency_emoji = "🔴"
+elif weakest_score < 2.0:
+    urgency_level = "Warning"
+    urgency_color = "#f97316"
+    urgency_emoji = "🟠"
+elif weakest_score < 2.5:
+    urgency_level = "Monitor"
+    urgency_color = "#eab308"
+    urgency_emoji = "🟡"
+else:
+    urgency_level = "Stable"
+    urgency_color = "#22c55e"
+    urgency_emoji = "🟢"
+
+# Build the HTML synopsis based on role
+if role == "regional":
+    title = "Regional Executive Summary"
+    subtitle = f"Region X – Northern Mindanao"
+    strength_label = "Regional Strength"
+    weakness_label = "Critical Priority"
+    analysis_text = f"<b>{weakest_dim}</b> is the weakest dimension regionally. This requires urgent regional-level intervention and coordinated support across divisions.<br><br><b>{strongest_dim}</b> is the region's strength. Document and share best practices across all divisions."
+    interventions = f"""
+    <li><b>Short-Term (0-6 Months):</b> Deploy Regional Field Technical Assistance Team (RFTAT) to priority divisions.</li>
+    <li><b>Medium-Term (6-12 Months):</b> Establish Regional SBM Monitoring and Evaluation System.</li>
+    <li><b>Long-Term (12+ Months):</b> Integrate SBM improvement into Regional Education Development Plan.</li>
+    """
+    policy_recs = f"""
+    <li><b>Immediate:</b> Prioritize {weakest_dim} in regional planning and resource allocation.</li>
+    <li><b>Short-Term:</b> Develop region-wide capacity building programs for {weakest_dim}.</li>
+    <li><b>Long-Term:</b> Build sustainable systems for continuous improvement across all dimensions.</li>
+    """
+    summary_cards = f"""
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin:12px 0;">
+        <div style="background:{bg_card};padding:12px;border-radius:8px;text-align:center;border:1px solid {border_light};">
+            <div style="font-size:24px;font-weight:700;color:{text_main};">14</div>
+            <div style="font-size:12px;color:{text_muted};">Total Divisions</div>
+        </div>
+        <div style="background:{bg_card};padding:12px;border-radius:8px;text-align:center;border:1px solid {border_light};">
+            <div style="font-size:24px;font-weight:700;color:{overall_color};">{overall_avg:.1f}</div>
+            <div style="font-size:12px;color:{text_muted};">Division SBM Index</div>
+            <div style="font-size:11px;color:{overall_color};">{overall_level}</div>
+        </div>
+        <div style="background:{bg_card};padding:12px;border-radius:8px;text-align:center;border:1px solid {border_light};">
+            <div style="font-size:24px;font-weight:700;color:{urgency_color};">{urgency_level}</div>
+            <div style="font-size:12px;color:{text_muted};">Urgency Level</div>
+            <div style="font-size:11px;color:{urgency_color};">{urgency_emoji} {weakest_dim} ({weakest_score:.1f})</div>
+        </div>
+    </div>
+    """
+elif role == "division":
+    title = "Division Executive Summary"
+    subtitle = f"{selected_sdo['name']}"
+    strength_label = "Strongest Dimension"
+    weakness_label = "Weakest Dimension"
+    analysis_text = f"<b>{weakest_dim}</b> is the weakest dimension across the division. This requires division-wide attention and coordinated support.<br><br><b>{strongest_dim}</b> is the division's strength. Document and share best practices across schools."
+    interventions = f"""
+    <li><b>Urgent:</b> Deploy division TA team to schools struggling with {weakest_dim}.</li>
+    <li><b>Short-Term:</b> Conduct division-wide training for {weakest_dim}.</li>
+    <li><b>Medium-Term:</b> Establish regular monitoring and reporting mechanisms.</li>
+    <li><b>Sustain:</b> Scale up best practices from {strongest_dim} across all schools.</li>
+    """
+    policy_recs = f"""
+    <li><b>0-3 Months:</b> Address {weakest_dim} with targeted TA and capacity building.</li>
+    <li><b>3-6 Months:</b> Strengthen monitoring and evaluation systems.</li>
+    <li><b>6-12 Months:</b> Scale up best practices across the division.</li>
+    """
+    summary_cards = f"""
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin:12px 0;">
+        <div style="background:{bg_card};padding:12px;border-radius:8px;text-align:center;border:1px solid {border_light};">
+            <div style="font-size:24px;font-weight:700;color:{text_main};">{total_schools}</div>
+            <div style="font-size:12px;color:{text_muted};">Total Schools</div>
+        </div>
+        <div style="background:{bg_card};padding:12px;border-radius:8px;text-align:center;border:1px solid {border_light};">
+            <div style="font-size:24px;font-weight:700;color:{overall_color};">{overall_avg:.1f}</div>
+            <div style="font-size:12px;color:{text_muted};">Division SBM Index</div>
+            <div style="font-size:11px;color:{overall_color};">{overall_level}</div>
+        </div>
+        <div style="background:{bg_card};padding:12px;border-radius:8px;text-align:center;border:1px solid {border_light};">
+            <div style="font-size:24px;font-weight:700;color:{urgency_color};">{pending_count}</div>
+            <div style="font-size:12px;color:{text_muted};">Schools with Pending Data</div>
+        </div>
+    </div>
+    """
+else:  # school
+    school = schools_in_sdo[0] if schools_in_sdo else None
+    school_name = school["name"] if school else "Your School"
+    title = f"Executive Summary: {school_name}"
+    subtitle = ""
+    strength_label = "Strongest Dimension"
+    weakness_label = "Weakest Dimension"
+    analysis_text = f"<b>{weakest_dim}</b> is the weakest dimension. This area requires immediate attention and targeted interventions.<br><br><b>{strongest_dim}</b> is the strongest dimension. Continue current practices and use this as a model for other areas."
+    interventions = f"""
+    <li><b>Immediate:</b> Conduct focused assessment and capacity building for {weakest_dim}.</li>
+    <li><b>Short-Term:</b> Develop an improvement plan with specific, measurable targets.</li>
+    <li><b>Medium-Term:</b> Implement interventions and monitor progress regularly.</li>
+    <li><b>Sustain:</b> Maintain and enhance performance in {strongest_dim}.</li>
+    """
+    policy_recs = ""
+    summary_cards = f"""
+    <div style="background:{bg_card};padding:16px;border-radius:8px;margin:12px 0;border:1px solid {border_light};">
+        <h4 style="margin-top:0;color:{text_main};">📊 Overall Performance: {overall_emoji} {overall_level}</h4>
+        <p style="font-size:15px;margin-bottom:4px;color:{text_main};">
+            <b>Overall SBM Index:</b> <span style="color:{overall_color};font-weight:700;">{overall_avg:.1f} / 3.0</span>
+            <span style="font-size:13px;color:{text_muted};margin-left:12px;">({overall_level} performance)</span>
+        </p>
+    </div>
+    """
+
+synopsis_html = f"""
+<div style="background:linear-gradient(135deg, {gradient_start} 0%, {gradient_end} 100%);padding:20px 24px;border-radius:12px;border-left:6px solid #0033A0;margin-bottom:20px;color:{text_main};box-shadow:0 2px 8px {shadow};">
+    <h3 style="margin-top:0;color:#0033A0;">📋 {title}</h3>
+    <p style="font-size:14px;color:{text_secondary};margin-bottom:12px;">
+        <b>Prepared for:</b> {user_name} · {(' <b>Division:</b> '+selected_sdo['name']) if role in ['division','school'] else ''} · <b>Date:</b> {current_date}
+    </p>
+    
+    {summary_cards}
+    
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:12px 0;">
+        <div style="background:{bg_strong};padding:14px;border-radius:8px;border-left:4px solid {border_strong};">
+            <h4 style="margin:0 0 6px 0;font-size:14px;color:{border_strong};">✅ {strength_label}</h4>
+            <p style="font-size:16px;font-weight:700;margin:0;color:{border_strong};">{strongest_dim}</p>
+            <p style="font-size:13px;margin:4px 0 0 0;color:{text_secondary};">Score: <b>{strongest_score:.1f}</b> / 3.0</p>
+        </div>
+        <div style="background:{bg_weak};padding:14px;border-radius:8px;border-left:4px solid {border_weak};">
+            <h4 style="margin:0 0 6px 0;font-size:14px;color:{border_weak};">⚠️ {weakness_label}</h4>
+            <p style="font-size:16px;font-weight:700;margin:0;color:{border_weak};">{weakest_dim}</p>
+            <p style="font-size:13px;margin:4px 0 0 0;color:{text_secondary};">Score: <b>{weakest_score:.1f}</b> / 3.0</p>
+        </div>
+    </div>
+    
+    <div style="background:{bg_analysis};padding:16px;border-radius:8px;margin:12px 0;border:1px solid {border_light};">
+        <h4 style="margin-top:0;color:{text_main};">💡 Strategic Analysis</h4>
+        <p style="font-size:14px;color:{text_secondary};">
+            {analysis_text}
+        </p>
+    </div>
+    
+    <div style="background:{bg_interventions};padding:16px;border-radius:8px;border:1px solid #fcd34d;margin:12px 0;">
+        <h4 style="margin-top:0;color:#92400e;">🎯 Recommended Interventions</h4>
+        <ul style="font-size:13px;color:{text_secondary};padding-left:20px;margin:4px 0;">
+            {interventions}
+        </ul>
+    </div>
+    
+    {f'''
+    <div style="background:{bg_priority};padding:12px;border-radius:8px;border:1px solid #93c5fd;margin:12px 0;">
+        <h4 style="margin-top:0;color:#1e40af;font-size:14px;">📌 Policy Recommendations</h4>
+        <ul style="font-size:13px;color:{text_secondary};padding-left:20px;margin:4px 0;">
+            {policy_recs}
+        </ul>
+    </div>
+    ''' if policy_recs else ''}
+    
+    <p style="font-size:12px;color:{text_muted};margin-top:12px;text-align:right;">
+        <i>Based on current SBM data. For {'school-level' if role=='school' else 'division-level' if role=='division' else 'regional-level'} planning and decision-making.</i>
+    </p>
+</div>
+"""
+
+# ─── WRAP WITH FULL HTML DOCUMENT FOR IFRAME ───
 full_html = f"""
 <!DOCTYPE html>
 <html>
@@ -418,8 +627,8 @@ full_html = f"""
         body {{
             margin: 0;
             padding: 0;
-            background-color: {bg_color};
-            color: {text_color};
+            background-color: {bg_main};
+            color: {text_main};
             font-family: 'Segoe UI', Roboto, sans-serif;
         }}
         .synopsis-container {{
