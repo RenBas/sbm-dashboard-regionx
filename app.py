@@ -431,25 +431,22 @@ if role == "regional":
         st.markdown("### 📊 Division Performance Matrix")
         st.caption("Performance of all 14 divisions across the 6 SBM dimensions. Scores are rounded to 1 decimal place.")
         
-        # Build matrix data
+        # Build matrix data with rounding at source
         matrix_data = []
         for sdo in sdo_list:
+            dim_scores = [round(x, 1) for x in sdo["dimension_scores"]]
             row = {
                 "Division": sdo["name"].replace("SDO ", ""),
-                "Curriculum & Teaching": sdo["dimension_scores"][0],
-                "Learning Environment": sdo["dimension_scores"][1],
-                "Leadership": sdo["dimension_scores"][2],
-                "Governance & Accountability": sdo["dimension_scores"][3],
-                "HR & Team Development": sdo["dimension_scores"][4],
-                "Finance & Resource Mgmt.": sdo["dimension_scores"][5]
+                "Curriculum & Teaching": dim_scores[0],
+                "Learning Environment": dim_scores[1],
+                "Leadership": dim_scores[2],
+                "Governance & Accountability": dim_scores[3],
+                "HR & Team Development": dim_scores[4],
+                "Finance & Resource Mgmt.": dim_scores[5]
             }
             matrix_data.append(row)
         
         df = pd.DataFrame(matrix_data)
-        
-        # Round all numeric columns to 1 decimal
-        numeric_cols = df.columns[1:]
-        df[numeric_cols] = df[numeric_cols].round(1)
         
         # Add summary row (regional average) rounded to 1 decimal
         avg_row = {"Division": "📊 REGIONAL AVERAGE"}
@@ -468,8 +465,9 @@ if role == "regional":
             else:
                 return 'background-color: #dc2626; color: white; font-weight: bold;'
         
-        # Apply styling and convert to HTML
+        # Apply styling
         styled_df = df.style.map(color_cell, subset=df.columns[1:])
+        # Convert to HTML with float format to ensure one decimal
         html_table = styled_df.to_html(index=False, escape=False, float_format="%.1f")
         
         # Display with markdown
