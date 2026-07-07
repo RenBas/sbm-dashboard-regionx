@@ -414,7 +414,7 @@ synopsis_html = generate_synopsis(
     min_dim_idx=min_dim_idx
 )
 
-# ─── IF REGIONAL, USE TABS ───
+# ─── TABS BASED ON ROLE ───
 if role == "regional":
     tab1, tab2 = st.tabs(["📋 Executive Summary", "📊 Division Performance Matrix"])
     
@@ -428,10 +428,11 @@ if role == "regional":
         st_html(wrapped_html, height=900, scrolling=True)
     
     with tab2:
+        # Division Performance Matrix (regional only)
         st.markdown("### 📊 Division Performance Matrix")
         st.caption("Performance of all 14 divisions across the 6 SBM dimensions. Scores are rounded to 1 decimal place.")
         
-        # Build matrix data with rounding at source
+        # Build matrix data
         matrix_data = []
         for sdo in sdo_list:
             dim_scores = [round(x, 1) for x in sdo["dimension_scores"]]
@@ -448,13 +449,12 @@ if role == "regional":
         
         df = pd.DataFrame(matrix_data)
         
-        # Add summary row (regional average) rounded to 1 decimal
+        # Add summary row (regional average)
         avg_row = {"Division": "📊 REGIONAL AVERAGE"}
         for dim in df.columns[1:]:
             avg_row[dim] = round(df[dim].mean(), 1)
         df = pd.concat([df, pd.DataFrame([avg_row])], ignore_index=True)
         
-        # Define color mapping function
         def color_cell(val):
             if pd.isna(val):
                 return ''
@@ -465,14 +465,10 @@ if role == "regional":
             else:
                 return 'background-color: #dc2626; color: white; font-weight: bold;'
         
-        # Apply styling and force number format to 1 decimal
         styled_df = df.style.map(color_cell, subset=df.columns[1:]).format("{:.1f}", subset=df.columns[1:])
         html_table = styled_df.to_html(index=False, escape=False)
-        
-        # Display with markdown
         st.markdown(html_table, unsafe_allow_html=True)
         
-        # Legend
         st.markdown("""
         <div style="display:flex;gap:16px;font-size:13px;margin:8px 0;">
             <span>🟢 <b>Strong</b> (≥ 2.5)</span>
@@ -481,7 +477,6 @@ if role == "regional":
         </div>
         """, unsafe_allow_html=True)
         
-        # Summary Statistics
         st.markdown("### 📈 Summary Statistics")
         summary_data = []
         for dim in DIMENSION_NAMES:
@@ -498,7 +493,6 @@ if role == "regional":
         summary_df = pd.DataFrame(summary_data)
         st.dataframe(summary_df, width='stretch', hide_index=True)
         
-        # ─── Drill-down: Jump to Division ───
         st.markdown("### 🔍 Jump to Division")
         col_sel, col_btn = st.columns([3, 1])
         with col_sel:
@@ -508,8 +502,196 @@ if role == "regional":
             if st.button("🚀 Go to Division", use_container_width=True):
                 st.session_state.go_to_division = selected_div_name
                 st.rerun()
+
+elif role == "division":
+    # Division user: Executive Summary + School Performance Dashboard
+    tab1, tab2 = st.tabs(["📋 Executive Summary", "📊 School Performance Dashboard"])
+    
+    with tab1:
+        from streamlit.components.v1 import html as st_html
+        wrapped_html = f"""
+        <div style="width:100%;padding:0;margin:0;box-sizing:border-box;">
+            {synopsis_html}
+        </div>
+        """
+        st_html(wrapped_html, height=900, scrolling=True)
+    
+    with tab2:
+        st.markdown("### 📊 School Performance Dashboard")
+        st.caption(f"Performance overview for all schools in {selected_sdo['name']}.")
+        
+        # 1. Summary cards
+        total_schools = len(schools_in_sdo)
+        complete = len(complete_schools)
+        pending = total_schools - complete
+        overall = overall_avg
+        strongest = DIMENSION_NAMES[max_dim_idx]
+        weakest = DIMENSION_NAMES[min_dim_idx]
+        
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("🏫 Total Schools", total_schools, delta=f"{pending} pending" if pending > 0 else None)
+        with col2:
+            st.metric("📊 Division SBM Index", f"{overall:.1f} / 3.0" if overall > 0 else "—")
+        with col3:
+            st.metric("⬆️ Strongest Dimension", strongest if overall > 0 else "—")
+        with col4:
+            st.metric("⬇️ Weakest Dimension", weakest if overall > 0 else "—", delta_color="inverse")
+        
+        # 2. Distribution per dimension (Strong/Moderate/Weak)
+        st.markdown("#### 📈 Distribution of Schools by Performance Level")
+        dist_data = []
+        for dim in DIMENSION_NAMES:
+            dim_idx = DIMENSION_NAMES.index(dim)
+            scores = [s["dimension_scores"][dim_idx] for s in complete_schools]
+            strong = sum(1 for x in scores if x >= 2.5)
+            moderate = sum(1 for x in scores if 2.0 <= x < 2.5)
+            weak = sum(1 for x in scores if x < 2.0)
+            dist_data.append({
+                "Dimension": dim,
+                "Strong (≥2.5)": strong,
+                "Moderate (2.0-2.4)": moderate,
+                "Weak (<2.0)": weak
+            })
+        dist_df = pd.DataFrame(dist_data)
+        st.dataframe(dist_df, width='stretch', hide_index=True)
+        
+        # Optional bar chart for better visualization (using plotly)
+        import plotly.graph_objects as go
+        fig = go.Figure()
+        for level, color in [("Strong (≥2.5)", "#22c55e"), ("Moderate (2.0-2.4)", "#eab308"), ("Weak (<2.0)", "#dc2626")]:
+            fig.add_trace(go.Bar(
+                name=level,
+                x=dist_df["Dimension"],
+                y=dist_df[level],
+                marker_color=color,
+                text=dist_df[level],
+                textposition='auto'
+            ))
+        fig.update_layout(
+            barmode='group',
+            height=400,
+            margin=dict(l=40, r=40, t=20, b=40),
+            legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='center', x=0.5),
+            xaxis=dict(tickangle=-15)
+        )
+        st.plotly_chart(fig, width='stretch')
+        
+        # 3. Paginated, searchable table of schools
+        st.markdown("#### 📋 School List")
+        
+        # Build table data
+        school_rows = []
+        for s in schools_in_sdo:
+            if s["data_status"] == "Pending":
+                overall_score = "—"
+                dim_scores = ["—"] * 6
+            else:
+                overall_score = round(s["overall_index"], 1)
+                dim_scores = [round(x, 1) for x in s["dimension_scores"]]
+            school_rows.append({
+                "School": s["name"],
+                "Type": s["type"],
+                "Overall SBM Index": overall_score,
+                "Curriculum & Teaching": dim_scores[0],
+                "Learning Environment": dim_scores[1],
+                "Leadership": dim_scores[2],
+                "Governance & Accountability": dim_scores[3],
+                "HR & Team Development": dim_scores[4],
+                "Finance & Resource Mgmt.": dim_scores[5],
+                "Data Status": s["data_status"],
+                "School ID": s["id"]  # Hidden, used for navigation
+            })
+        table_df = pd.DataFrame(school_rows)
+        
+        # Filter by search query (if any)
+        if search_query:
+            # Use the global search_query from sidebar
+            filtered_table = table_df[table_df["School"].str.contains(search_query, case=False, na=False)]
+        else:
+            filtered_table = table_df
+        
+        # Drop the School ID column for display (keep for navigation)
+        display_df = filtered_table.drop(columns=["School ID"])
+        
+        # Pagination
+        page_size = 20
+        total_rows = len(display_df)
+        total_pages = max(1, (total_rows + page_size - 1) // page_size)
+        
+        if "school_page" not in st.session_state:
+            st.session_state.school_page = 1
+        
+        # Page navigation
+        if total_pages > 1:
+            cols = st.columns([1, 3, 1])
+            with cols[0]:
+                if st.button("◀ Previous", disabled=(st.session_state.school_page <= 1)):
+                    st.session_state.school_page -= 1
+                    st.rerun()
+            with cols[1]:
+                st.caption(f"Page {st.session_state.school_page} of {total_pages}")
+            with cols[2]:
+                if st.button("Next ▶", disabled=(st.session_state.school_page >= total_pages)):
+                    st.session_state.school_page += 1
+                    st.rerun()
+        
+        start_idx = (st.session_state.school_page - 1) * page_size
+        end_idx = min(start_idx + page_size, total_rows)
+        page_df = display_df.iloc[start_idx:end_idx]
+        
+        # Color code the overall index and dimension scores
+        def color_score(val):
+            if val == "—" or pd.isna(val):
+                return ''
+            if val >= 2.5:
+                return 'background-color: #22c55e; color: white; font-weight: bold;'
+            elif val >= 2.0:
+                return 'background-color: #eab308; color: white; font-weight: bold;'
+            else:
+                return 'background-color: #dc2626; color: white; font-weight: bold;'
+        
+        # Apply styling to numeric columns
+        numeric_cols = ["Overall SBM Index", "Curriculum & Teaching", "Learning Environment", "Leadership", "Governance & Accountability", "HR & Team Development", "Finance & Resource Mgmt."]
+        # Convert numeric columns to float where possible, leave "—" as string
+        for col in numeric_cols:
+            page_df[col] = pd.to_numeric(page_df[col], errors='coerce')
+        
+        styled_page = page_df.style.map(color_score, subset=numeric_cols)
+        st.dataframe(styled_page, width='stretch', height=400)
+        
+        # Legend for color coding
+        st.markdown("""
+        <div style="display:flex;gap:16px;font-size:13px;margin:8px 0;">
+            <span>🟢 <b>Strong</b> (≥ 2.5)</span>
+            <span>🟡 <b>Moderate</b> (2.0 – 2.4)</span>
+            <span>🔴 <b>Weak</b> (< 2.0)</span>
+            <span>⚪ <b>Pending</b> (No data)</span>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # If search results are empty, show a message
+        if len(page_df) == 0:
+            st.info("No schools match your search criteria.")
+        
+        # ─── Drill-down: Jump to School ───
+        st.markdown("#### 🔍 Jump to School")
+        col_school, col_school_btn = st.columns([3, 1])
+        with col_school:
+            school_names = [s["name"] for s in schools_in_sdo]
+            selected_school_name = st.selectbox("Select a school to view its detailed dashboard:", school_names)
+        with col_school_btn:
+            if st.button("🚀 Go to School", use_container_width=True):
+                # Find the school and set session variable
+                for s in schools_in_sdo:
+                    if s["name"] == selected_school_name:
+                        st.session_state.go_to_school = s["id"]
+                        break
+                # We'll need to implement school-level navigation later; for now, just show a message
+                st.info(f"Navigating to {selected_school_name} (feature coming soon)")
+
 else:
-    # Non-regional: just display the synopsis as before (no tabs)
+    # School head: just display synopsis (no tabs)
     from streamlit.components.v1 import html as st_html
     wrapped_html = f"""
     <div style="width:100%;padding:0;margin:0;box-sizing:border-box;">
