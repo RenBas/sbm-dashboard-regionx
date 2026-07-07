@@ -83,6 +83,7 @@ from utils.auth import (
     get_accessible_divisions_summary, get_user_division, is_school_head
 )
 from utils.download_helpers import generate_report_data, generate_template_csv
+from utils.synopsis_generator import generate_synopsis
 
 # ════════════════════════════════════════════════════════════════
 # ✅ CACHE DATA LOADING
@@ -167,9 +168,6 @@ filtered_schools = filtered_data["filtered_schools"]
 # DETERMINE SELECTED SDO (BEFORE SIDEBAR)
 # ════════════════════════════════════════════════════════════════
 
-# We need to compute selected_sdo and selected_sdo_id before sidebar
-# because sidebar will use them.
-
 # Initialize variables
 selected_sdo = None
 selected_sdo_id = None
@@ -200,7 +198,7 @@ else:
         st.stop()
 
 # ─── COMPUTE SCHOOL DATA (for the selected SDO) ───
-# This must be done before sidebar because download buttons use it.
+# This must be done before sidebar because download buttons and synopsis use it.
 schools_in_sdo = get_schools_by_sdo(filtered_schools, selected_sdo_id) if selected_sdo_id else []
 complete_schools = [s for s in schools_in_sdo if s["data_status"] != "Pending"]
 dim_avgs = compute_dimension_averages(schools_in_sdo)
@@ -375,16 +373,35 @@ st.markdown(f"## 🎓 SBM Dashboard: {selected_sdo['name']}")
 st.caption(f"Capital: {selected_sdo['capital']} · {selected_sdo['id']} schools")
 
 # ─── KPI CARDS ───
-# (These use the already computed variables)
 col1, col2, col3, col4 = st.columns(4)
 with col1:
-    st.metric("🏫 Total Schools", len(schools_in_sdo), delta=f"{len([s for s in schools_in_sdo if s['data_status']=='Pending'])} pending" if any(s['data_status']=='Pending' for s in schools_in_sdo) else None)
+    st.metric("🏫 Total Schools", len(schools_in_sdo), 
+              delta=f"{len([s for s in schools_in_sdo if s['data_status']=='Pending'])} pending" 
+              if any(s['data_status']=='Pending' for s in schools_in_sdo) else None)
 with col2:
     st.metric("📊 Overall SBM Index", f"{overall_avg:.1f} / 3.0" if overall_avg > 0 else "—")
 with col3:
     st.metric("⬆️ Highest Dimension", DIMENSION_NAMES[max_dim_idx] if overall_avg > 0 else "—")
 with col4:
     st.metric("⬇️ Lowest Dimension (Urgent)", DIMENSION_NAMES[min_dim_idx] if overall_avg > 0 else "—", delta_color="inverse")
+
+# ─── SYNOPSIS SECTION ───
+st.markdown("---")
+
+# Generate synopsis based on user role and data
+synopsis_html = generate_synopsis(
+    user_role=role,
+    user_name=user_name,
+    selected_sdo=selected_sdo,
+    schools_in_sdo=schools_in_sdo,
+    complete_schools=complete_schools,
+    dim_avgs=dim_avgs,
+    overall_avg=overall_avg,
+    max_dim_idx=max_dim_idx,
+    min_dim_idx=min_dim_idx
+)
+
+st.markdown(synopsis_html, unsafe_allow_html=True)
 
 # ─── MAP ───
 st.markdown("---")
