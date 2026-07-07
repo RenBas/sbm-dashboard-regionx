@@ -2,6 +2,7 @@
 
 import streamlit as st
 import random
+import pandas as pd
 
 # ─── PAGE CONFIG ───
 st.set_page_config(
@@ -212,6 +213,9 @@ else:
     max_dim_idx = 0
     min_dim_idx = 0
 
+# ─── DETECT DARK MODE ───
+is_dark_mode = (st.session_state.custom_theme == "dark")
+
 # ════════════════════════════════════════════════════════════════
 # SIDEBAR
 # ════════════════════════════════════════════════════════════════
@@ -401,18 +405,132 @@ synopsis_html = generate_synopsis(
     min_dim_idx=min_dim_idx
 )
 
-# ─── RENDER SYNOPSIS USING st.components.v1.html ───
-from streamlit.components.v1 import html as st_html
-
-# Wrap the HTML in a div with proper styling to avoid any interference
-wrapped_html = f"""
-<div style="width:100%;padding:0;margin:0;box-sizing:border-box;">
-    {synopsis_html}
-</div>
-"""
-
-# Render using components – guaranteed to render raw HTML
-st_html(wrapped_html, height=900, scrolling=True)
+# ─── IF REGIONAL, USE TABS ───
+if role == "regional":
+    tab1, tab2 = st.tabs(["📋 Executive Summary", "📊 Division Performance Matrix"])
+    
+    with tab1:
+        # Render executive summary (using components.html)
+        from streamlit.components.v1 import html as st_html
+        wrapped_html = f"""
+        <div style="width:100%;padding:0;margin:0;box-sizing:border-box;">
+            {synopsis_html}
+        </div>
+        """
+        st_html(wrapped_html, height=900, scrolling=True)
+    
+    with tab2:
+        st.markdown("### 📊 Division Performance Matrix")
+        st.caption("Performance of all 14 divisions across the 6 SBM dimensions.")
+        
+        # Build matrix data
+        matrix_data = []
+        for sdo in sdo_list:
+            dim_scores = sdo["dimension_scores"]
+            row = {
+                "Division": sdo["name"].replace("SDO ", ""),
+                "Curriculum & Teaching": dim_scores[0],
+                "Learning Environment": dim_scores[1],
+                "Leadership": dim_scores[2],
+                "Governance & Accountability": dim_scores[3],
+                "HR & Team Development": dim_scores[4],
+                "Finance & Resource Mgmt.": dim_scores[5]
+            }
+            matrix_data.append(row)
+        
+        df = pd.DataFrame(matrix_data)
+        
+        # Add summary row (regional average)
+        avg_row = {"Division": "📊 REGIONAL AVERAGE"}
+        for dim in df.columns[1:]:
+            avg_row[dim] = df[dim].mean()
+        df = pd.concat([df, pd.DataFrame([avg_row])], ignore_index=True)
+        
+        # Define color mapping function for styling
+        def color_cell(val):
+            if pd.isna(val):
+                return ''
+            if val >= 2.5:
+                return 'background-color: #22c55e; color: white; font-weight: bold;'
+            elif val >= 2.0:
+                return 'background-color: #eab308; color: white; font-weight: bold;'
+            else:
+                return 'background-color: #dc2626; color: white; font-weight: bold;'
+        
+        # Apply styling
+        styled_df = df.style.map(color_cell, subset=df.columns[1:])
+        
+        # Display the matrix
+        st.dataframe(styled_df, use_container_width=True, height=600)
+        
+        # Legend
+        st.markdown("""
+        <div style="display:flex;gap:16px;font-size:13px;margin:8px 0;">
+            <span>🟢 <b>Strong</b> (≥ 2.5)</span>
+            <span>🟡 <b>Moderate</b> (2.0 – 2.4)</span>
+            <span>🔴 <b>Weak</b> (< 2.0)</span>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Summary Statistics
+        st.markdown("### 📈 Summary Statistics")
+        summary_data = []
+        for dim in DIMENSION_NAMES:
+            scores = [sdo["dimension_scores"][DIMENSION_NAMES.index(dim)] for sdo in sdo_list]
+            strong = sum(1 for x in scores if x >= 2.5)
+            moderate = sum(1 for x in scores if 2.0 <= x < 2.5)
+            weak = sum(1 for x in scores if x < 2.0)
+            summary_data.append({
+                "Dimension": dim,
+                "Strong (≥2.5)": strong,
+                "Moderate (2.0-2.4)": moderate,
+                "Weak (<2.0)": weak
+            })
+        summary_df = pd.DataFrame(summary_data)
+        st.dataframe(summary_df, use_container_width=True, hide_index=True)
+        
+        # ─── Drill-down: Jump to Division ───
+        st.markdown("### 🔍 Jump to Division")
+        col_sel, col_btn = st.columns([3, 1])
+        with col_sel:
+            division_names = [sdo["name"] for sdo in sdo_list]
+            selected_div_name = st.selectbox("Select a division to view its detailed dashboard:", division_names)
+        with col_btn:
+            if st.button("🚀 Go to Division", use_container_width=True):
+                # Update session state to select this division and rerun
+                st.session_state.selected_sdo_name = selected_div_name
+                # We need to set the sidebar selection to this division.
+                # Since the sidebar uses a selectbox, we need to set its value.
+                # We can use query parameters or store in session.
+                # Simpler: we can set a session variable and then rerun, but the selectbox won't reflect.
+                # Alternative: we can use st.query_params to pass the division name.
+                # Let's use st.query_params for navigation.
+                st.query_params["division"] = selected_div_name
+                st.rerun()
+        
+        # Check if a division was selected via query_params
+        if "division" in st.query_params:
+            div_name = st.query_params["division"]
+            # Find the division and set it as selected
+            matching_sdo = next((s for s in sdo_list if s["name"] == div_name), None)
+            if matching_sdo:
+                # Update sidebar selection by setting session state
+                # We'll need to update the selectbox in the sidebar.
+                # Since the sidebar selectbox is not directly accessible, we can use session state.
+                # We'll store the selected division name and rerun to update the sidebar.
+                st.session_state.sidebar_selection = div_name
+                # Clear query param to avoid loop
+                st.query_params.clear()
+                st.rerun()
+else:
+    # Non-regional: just display the synopsis as before (no tabs)
+    from streamlit.components.v1 import html as st_html
+    wrapped_html = f"""
+    <div style="width:100%;padding:0;margin:0;box-sizing:border-box;">
+        {synopsis_html}
+    </div>
+    """
+    st_html(wrapped_html, height=900, scrolling=True)
 
 # ─── MAP ───
 st.markdown("---")
