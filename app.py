@@ -222,6 +222,13 @@ else:
     max_dim_idx = 0
     min_dim_idx = 0
 
+# ─── COMPUTE REGIONAL AVERAGE ───
+all_complete = [s for s in schools if s["data_status"] != "Pending"]
+if all_complete:
+    regional_avg = round(sum(s["overall_index"] for s in all_complete) / len(all_complete), 1)
+else:
+    regional_avg = 0
+
 # ─── DETECT DARK MODE ───
 is_dark_mode = (st.session_state.custom_theme == "dark")
 
@@ -278,6 +285,8 @@ with st.sidebar:
                     overall_avg = 0
                     max_dim_idx = 0
                     min_dim_idx = 0
+                if all_complete:
+                    regional_avg = round(sum(s["overall_index"] for s in all_complete) / len(all_complete), 1)
         else:
             st.warning("No divisions accessible.")
             selected_sdo = None
@@ -515,6 +524,62 @@ elif role == "division":
         st.markdown("### 📊 School Performance Dashboard")
         st.caption(f"Detailed school-level performance for {selected_sdo['name']}.")
         
+        # ─── Bar Chart: Division vs Regional Overall SBM Index ───
+        st.markdown("#### 🏆 Division vs Regional Overall SBM Index")
+        import plotly.graph_objects as go
+        fig = go.Figure()
+        
+        fig.add_trace(go.Bar(
+            name="Division",
+            x=["SBM Index"],
+            y=[overall_avg],
+            marker_color="#0033A0",
+            text=[f"{overall_avg:.1f}"],
+            textposition='auto',
+            width=0.4
+        ))
+        
+        fig.add_trace(go.Bar(
+            name="Region X",
+            x=["SBM Index"],
+            y=[regional_avg],
+            marker_color="#9CA3AF",
+            text=[f"{regional_avg:.1f}"],
+            textposition='auto',
+            width=0.4
+        ))
+        
+        fig.update_layout(
+            height=300,
+            margin=dict(l=40, r=40, t=20, b=40),
+            legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='center', x=0.5),
+            yaxis=dict(range=[0, 3.5], tickvals=[0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0]),
+            xaxis=dict(showticklabels=False),
+            bargap=0.5,
+            bargroupgap=0.2,
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)'
+        )
+        
+        # Add annotation for difference
+        diff = overall_avg - regional_avg
+        if diff > 0:
+            diff_text = f"📈 Division is {diff:.1f} points above regional average"
+            diff_color = "#22c55e"
+        elif diff < 0:
+            diff_text = f"📉 Division is {abs(diff):.1f} points below regional average"
+            diff_color = "#dc2626"
+        else:
+            diff_text = "📊 Division is at par with regional average"
+            diff_color = "#eab308"
+        
+        st.plotly_chart(fig, width='stretch')
+        st.markdown(f"""
+        <div style="text-align:center;padding:8px;font-size:15px;font-weight:500;color:{diff_color};">
+            {diff_text}
+        </div>
+        """, unsafe_allow_html=True)
+        
         # ─── Distribution per dimension ───
         st.markdown("#### 📈 Distribution of Schools by Performance Level")
         dist_data = []
@@ -534,10 +599,9 @@ elif role == "division":
         st.dataframe(dist_df, width='stretch', hide_index=True)
         
         # ─── Bar chart ───
-        import plotly.graph_objects as go
-        fig = go.Figure()
+        fig2 = go.Figure()
         for level, color in [("Strong (≥2.5)", "#22c55e"), ("Moderate (2.0-2.4)", "#eab308"), ("Weak (<2.0)", "#dc2626")]:
-            fig.add_trace(go.Bar(
+            fig2.add_trace(go.Bar(
                 name=level,
                 x=dist_df["Dimension"],
                 y=dist_df[level],
@@ -545,14 +609,14 @@ elif role == "division":
                 text=dist_df[level],
                 textposition='auto'
             ))
-        fig.update_layout(
+        fig2.update_layout(
             barmode='group',
             height=400,
             margin=dict(l=40, r=40, t=20, b=40),
             legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='center', x=0.5),
             xaxis=dict(tickangle=-15)
         )
-        st.plotly_chart(fig, width='stretch')
+        st.plotly_chart(fig2, width='stretch')
         
         # ─── Paginated, searchable table with one decimal ───
         st.markdown("#### 📋 School List")
@@ -622,12 +686,9 @@ elif role == "division":
                         "Finance & Resource Mgmt."]
         for col in numeric_cols:
             if col in page_df.columns:
-                # Replace "—" with NaN for proper numeric conversion
                 page_df[col] = pd.to_numeric(page_df[col], errors='coerce')
-                # Round to 1 decimal
                 page_df[col] = page_df[col].round(1)
         
-        # Define color function
         def color_score(val):
             if pd.isna(val):
                 return ''
@@ -638,14 +699,11 @@ elif role == "division":
             else:
                 return 'background-color: #dc2626; color: white; font-weight: bold;'
         
-        # Apply styling
         styled_page = page_df.style.map(color_score, subset=numeric_cols)
-        # Format the numeric columns to one decimal
         styled_page = styled_page.format("{:.1f}", subset=numeric_cols)
         
         st.dataframe(styled_page, width='stretch', height=400)
         
-        # Legend
         st.markdown("""
         <div style="display:flex;gap:16px;font-size:13px;margin:8px 0;">
             <span>🟢 <b>Strong</b> (≥ 2.5)</span>
@@ -658,7 +716,6 @@ elif role == "division":
         if len(page_df) == 0:
             st.info("No schools match your search criteria.")
         
-        # ─── Jump to School ───
         st.markdown("#### 🔍 Jump to School")
         col_school, col_school_btn = st.columns([3, 1])
         with col_school:
