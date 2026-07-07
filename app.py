@@ -107,15 +107,16 @@ if not auth_status["logged_in"]:
     <div style="text-align:center;padding:60px 20px;">
         <h1>🎓 SBM Digital Twin Dashboard</h1>
         <p style="color:#6b7280;font-size:18px;">DepEd Region X – Northern Mindanao</p>
-        <div style="margin-top:40px;max-width:400px;margin-left:auto;margin-right:auto;">
+        <div style="margin-top:40px;max-width:450px;margin-left:auto;margin-right:auto;">
             <div style="background:#f8f9fa;padding:30px;border-radius:10px;border:1px solid #e5e7eb;">
                 <h3 style="margin-top:0;">🔐 Sign In</h3>
-                <p style="font-size:13px;color:#6b7280;">
+                <div style="text-align:left;font-size:13px;color:#4b5563;background:#f1f5f9;padding:12px;border-radius:6px;margin:12px 0;">
                     <b>Demo Credentials:</b><br>
-                    Regional: regional / regional123<br>
-                    Division: sdo_bukidnon / sdo123<br>
-                    School: principal_cdo / school123
-                </p>
+                    <b>Regional:</b> regional / regional123<br>
+                    <b>Division:</b> sdo_bukidnon / sdo123<br>
+                    <b>School:</b> principal_cdo / school123<br>
+                    <i style="font-size:12px;color:#6b7280;">(Copy username exactly as shown)</i>
+                </div>
     """, unsafe_allow_html=True)
     
     with st.form("login_form"):
@@ -145,7 +146,7 @@ if not auth_status["logged_in"]:
     
     st.stop()
 
-# ─── USER INFORMATION ───
+# ─── USER IS LOGGED IN ───
 user = st.session_state.user
 role = user.get("role", "school")
 user_name = user.get("name", "User")
@@ -157,7 +158,6 @@ filtered_schools = filtered_data["filtered_schools"]
 
 # If school head, auto-select their school
 if is_school_head(user) and filtered_schools:
-    # School heads only see their school – auto-select
     selected_sdo_id = filtered_schools[0]["sdo_id"] if filtered_schools else None
 else:
     selected_sdo_id = None
@@ -186,22 +186,19 @@ with st.sidebar:
             st.session_state.custom_theme = "dark"
             st.rerun()
     
-    # ── Navigation (Adapted to role) ──
+    # ── Navigation ──
     st.markdown("---")
     st.markdown("### 🗺️ Navigation")
     
-    # Division selector – only show if not school head
     if not is_school_head(user):
         if filtered_sdos:
             sdo_names = [s["name"] for s in filtered_sdos]
             if len(sdo_names) == 1:
-                # Only one division available (division-level user)
                 selected_sdo = filtered_sdos[0]
                 selected_sdo_name = selected_sdo["name"]
                 selected_sdo_id = selected_sdo["id"]
                 st.caption(f"📋 {selected_sdo_name}")
             else:
-                # Multiple divisions (regional user)
                 selected_sdo_name = st.selectbox("Select Division", options=sdo_names, index=0)
                 selected_sdo = next(s for s in filtered_sdos if s["name"] == selected_sdo_name)
                 selected_sdo_id = selected_sdo["id"]
@@ -210,7 +207,6 @@ with st.sidebar:
             selected_sdo = None
             selected_sdo_id = None
     else:
-        # School head: show their school name instead of division selector
         if filtered_schools:
             school = filtered_schools[0]
             selected_sdo = next((s for s in sdo_list if s["id"] == school["sdo_id"]), None)
@@ -321,11 +317,9 @@ try:
     map_center = [selected_sdo["lat"], selected_sdo["lng"]]
     m = folium.Map(location=map_center, zoom_start=8, tiles="OpenStreetMap")
     
-    # Show only accessible SDOs
     for sdo in filtered_sdos:
         add_sdo_shield(m, sdo)
     
-    # Show only accessible schools
     for school in schools_in_sdo:
         add_school_dot(m, school)
     
