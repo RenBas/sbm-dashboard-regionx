@@ -86,7 +86,7 @@ from utils.auth import (
 from utils.download_helpers import generate_report_data, generate_excel_template, generate_template_csv
 from utils.synopsis_generator import generate_synopsis
 from utils.twin_ui import render_sandbox
-from utils.data_processor import process_uploaded_data  # ✅ New import
+from utils.data_processor import process_uploaded_data
 
 # ════════════════════════════════════════════════════════════════
 # ✅ DATA MANAGEMENT (Single Source of Truth)
@@ -104,11 +104,9 @@ def get_active_data():
     Get the active dataset (uploaded if available, otherwise mock).
     Returns (sdo_list, schools).
     """
-    # Check if uploaded data exists in session state
     if "uploaded_sdo_list" in st.session_state and "uploaded_schools" in st.session_state:
         return st.session_state.uploaded_sdo_list, st.session_state.uploaded_schools
     else:
-        # Fall back to cached mock data
         return load_cached_mock_data()
 
 def set_active_data(sdo_list, schools):
@@ -391,6 +389,17 @@ with st.sidebar:
         except Exception as e:
             st.error(f"❌ Error processing file: {e}")
     
+    # ─── DEBUG INFO ───
+    with st.expander("🔍 Debug Data Info", expanded=False):
+        st.write(f"**Data Source:** {'Uploaded' if 'uploaded_sdo_list' in st.session_state else 'Mock'}")
+        st.write(f"**Total SDOs:** {len(sdo_list)}")
+        st.write(f"**Total Schools:** {len(schools)}")
+        st.write(f"**Complete Schools:** {len([s for s in schools if s['data_status'] != 'Pending'])}")
+        st.write(f"**Pending Schools:** {len([s for s in schools if s['data_status'] == 'Pending'])}")
+        if schools:
+            sample = schools[0]
+            st.write(f"**Sample School Scores:** {sample.get('dimension_scores', [])}")
+    
     st.markdown("---")
     if st.button("🚪 Logout", use_container_width=True):
         logout()
@@ -423,14 +432,6 @@ with st.sidebar:
     st.markdown("---")
     st.caption("SBM Digital Twin · Prototype v1.0")
     st.caption("DepEd Region X – Northern Mindanao")
-    
-    # ─── Debug Info ───
-    with st.expander("🔍 Debug Data Info", expanded=False):
-    st.write(f"**Data Source:** {'Uploaded' if 'uploaded_sdo_list' in st.session_state else 'Mock'}")
-    st.write(f"**Total SDOs:** {len(sdo_list)}")
-    st.write(f"**Total Schools:** {len(schools)}")
-    st.write(f"**Complete Schools:** {len([s for s in schools if s['data_status'] != 'Pending'])}")
-    st.write(f"**Pending Schools:** {len([s for s in schools if s['data_status'] == 'Pending'])}")
 
 # ════════════════════════════════════════════════════════════════
 # MAIN CONTENT
