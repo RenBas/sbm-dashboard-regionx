@@ -423,6 +423,14 @@ with st.sidebar:
     st.markdown("---")
     st.caption("SBM Digital Twin · Prototype v1.0")
     st.caption("DepEd Region X – Northern Mindanao")
+    
+    # ─── Debug Info ───
+    with st.expander("🔍 Debug Data Info", expanded=False):
+    st.write(f"**Data Source:** {'Uploaded' if 'uploaded_sdo_list' in st.session_state else 'Mock'}")
+    st.write(f"**Total SDOs:** {len(sdo_list)}")
+    st.write(f"**Total Schools:** {len(schools)}")
+    st.write(f"**Complete Schools:** {len([s for s in schools if s['data_status'] != 'Pending'])}")
+    st.write(f"**Pending Schools:** {len([s for s in schools if s['data_status'] == 'Pending'])}")
 
 # ════════════════════════════════════════════════════════════════
 # MAIN CONTENT
