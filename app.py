@@ -1,1292 +1,211 @@
-"""Main Streamlit application for SBM Dashboard – Region X."""
-
 import streamlit as st
-import random
 import pandas as pd
+import plotly.express as px  # optional, but good for visualisation
 
-# ─── PAGE CONFIG ───
+# ------------------------------------------------------------------
+# 1. PAGE CONFIGURATION
+# ------------------------------------------------------------------
 st.set_page_config(
-    page_title="SBM Dashboard – Region X",
-    page_icon="🎓",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    page_title="SBM Dashboard & Digital Twin",
+    page_icon="📊",
+    layout="wide"
 )
 
-# ─── CUSTOM THEME ───
-if "custom_theme" not in st.session_state:
-    st.session_state.custom_theme = "light"
+# ------------------------------------------------------------------
+# 2. SESSION STATE INITIALISATION (The "Zero" State)
+# ------------------------------------------------------------------
+def reset_app():
+    """Hard reset: clear all processed data, twin state, and flags."""
+    keys_to_clear = [
+        "uploaded_file",
+        "raw_school_info",
+        "raw_sbm_assessment",
+        "processed_school_data",
+        "processed_sbm_scores",
+        "dimension_averages",
+        "twin_results",
+        "dashboard_rendered"
+    ]
+    for key in keys_to_clear:
+        if key in st.session_state:
+            del st.session_state[key]
 
-if st.session_state.custom_theme == "dark":
-    st.markdown("""
-    <style>
-        .stApp { background-color: #0E1117 !important; }
-        .stApp > header { background-color: #1A1C23 !important; }
-        .stApp > header [data-testid="stToolbar"] { background-color: #1A1C23 !important; }
-        .stSidebar { background-color: #1A1C23 !important; }
-        .stSidebar [data-testid="stSidebarContent"] { background-color: #1A1C23 !important; }
-        .stSidebar .stMarkdown, .stSidebar .stSelectbox, .stSidebar .stTextInput { color: #FAFAFA !important; }
-        .stSidebar .stSelectbox label, .stSidebar .stTextInput label { color: #FAFAFA !important; }
-        .stSidebar .stSelectbox select, .stSidebar .stTextInput input { background-color: #262730 !important; color: #FAFAFA !important; border-color: #4A4A5A !important; }
-        .stSidebar .stSelectbox select option { background-color: #262730 !important; color: #FAFAFA !important; }
-        .stSidebar .stButton button { background-color: #262730 !important; color: #FAFAFA !important; border-color: #4A4A5A !important; }
-        .stSidebar .stButton button:hover { background-color: #3A3A4A !important; }
-        .stSidebar .stButton button[data-baseweb="button"][data-theme="primary"] { background-color: #0033A0 !important; color: #FFFFFF !important; }
-        .stMarkdown, .stCaption, .stMetric label, .stMetric div { color: #FAFAFA !important; }
-        .stMetric { background-color: #1A1C23 !important; border-color: #2A2C33 !important; }
-        .stMetric [data-testid="metric-value"] { color: #FAFAFA !important; }
-        .stTabs [data-baseweb="tab-list"] { background-color: #1A1C23 !important; border-bottom-color: #2A2C33 !important; }
-        .stTabs [data-baseweb="tab"] { color: #9CA3AF !important; }
-        .stTabs [data-baseweb="tab"]:hover { color: #FAFAFA !important; }
-        .stTabs [data-baseweb="tab"][aria-selected="true"] { color: #FAFAFA !important; border-bottom-color: #0033A0 !important; }
-        .stDataFrame { border-color: #2A2C33 !important; }
-        .stDataFrame thead tr th { background-color: #1A1C23 !important; color: #FAFAFA !important; }
-        .stDataFrame tbody tr td { color: #FAFAFA !important; border-bottom-color: #2A2C33 !important; }
-        .stDataFrame tbody tr:hover td { background-color: #262730 !important; }
-        .stAlert { background-color: #1A1C23 !important; border-color: #2A2C33 !important; color: #FAFAFA !important; }
-        .stAlert .stMarkdown { color: #FAFAFA !important; }
-        .stInfo { background-color: #1A1C23 !important; border-color: #0033A0 !important; }
-        .stInfo .stMarkdown { color: #FAFAFA !important; }
-        .stSelectbox label, .stTextInput label { color: #FAFAFA !important; }
-        .stSelectbox select, .stTextInput input { background-color: #262730 !important; color: #FAFAFA !important; border-color: #4A4A5A !important; }
-        .stSelectbox select option { background-color: #262730 !important; color: #FAFAFA !important; }
-        hr { border-color: #2A2C33 !important; }
-        h1, h2, h3, h4, h5, h6 { color: #FAFAFA !important; }
-        .custom-footnote { background-color: #1A1C23 !important; border-left: 4px solid #0033A0 !important; color: #FAFAFA !important; }
-        .custom-footnote .text-muted { color: #9CA3AF !important; }
-        footer { visibility: hidden !important; }
-        .stApp > footer { display: none !important; }
-    </style>
-    """, unsafe_allow_html=True)
-else:
-    st.markdown("""
-    <style>
-        .custom-footnote { background-color: #F8F9FA !important; border-left: 4px solid #0033A0 !important; color: #1A1A2E !important; }
-        .custom-footnote .text-muted { color: #6B7280 !important; }
-        footer { visibility: hidden !important; }
-        .stApp > footer { display: none !important; }
-    </style>
-    """, unsafe_allow_html=True)
+    # Always set these flags to False
+    st.session_state.analysis_complete = False
+    st.session_state.dashboard_rendered = False
 
-# ─── LOAD CUSTOM CSS ───
-try:
-    with open("assets/style.css", "r") as f:
-        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
-except FileNotFoundError:
-    pass
+# Initialise control flags if they don't exist
+if "analysis_complete" not in st.session_state:
+    st.session_state.analysis_complete = False
+if "dashboard_rendered" not in st.session_state:
+    st.session_state.dashboard_rendered = False
 
-# ─── IMPORTS ───
-from utils.constants import DIMENSION_NAMES
-from utils.data_loader import load_sdo_data, load_all_schools, get_schools_by_sdo, compute_dimension_averages
-from utils.map_helpers import add_sdo_shield, add_school_dot
-from utils.chart_helpers import create_radar_chart, create_trend_chart, create_indicators_table
-from utils.auth import (
-    authenticate, login_status, logout, get_accessible_schools,
-    get_accessible_divisions_summary, is_school_head
+# ------------------------------------------------------------------
+# 3. UI LAYOUT: Upload, Run, and Reset
+# ------------------------------------------------------------------
+st.title("📊 SBM Dashboard & Digital Twin")
+st.markdown("Upload your SBM Excel file, then click **Run Analysis** to process the data.")
+
+# ---- File Uploader ----
+uploaded_file = st.file_uploader(
+    "📂 Upload Excel file (mock_sbm_data.xlsx)",
+    type=["xlsx"],
+    key="sbm_file_uploader"
 )
-from utils.download_helpers import generate_report_data, generate_excel_template, generate_template_csv
-from utils.synopsis_generator import generate_synopsis
-from utils.twin_ui import render_sandbox
-from utils.data_processor import process_uploaded_data
 
-# ════════════════════════════════════════════════════════════════
-# ✅ DATA MANAGEMENT (Single Source of Truth)
-# ════════════════════════════════════════════════════════════════
-
-@st.cache_data
-def load_cached_mock_data():
-    """Load the default mock data from JSON files."""
-    sdo_list = load_sdo_data()
-    schools = load_all_schools(sdo_list)
-    return sdo_list, schools
-
-def get_active_data():
-    """
-    Get the active dataset (uploaded if available, otherwise mock).
-    Returns (sdo_list, schools).
-    """
-    if "uploaded_sdo_list" in st.session_state and "uploaded_schools" in st.session_state:
-        return st.session_state.uploaded_sdo_list, st.session_state.uploaded_schools
-    else:
-        return load_cached_mock_data()
-
-def set_active_data(sdo_list, schools):
-    """Set the active dataset in session state."""
-    st.session_state.uploaded_sdo_list = sdo_list
-    st.session_state.uploaded_schools = schools
-
-def clear_active_data():
-    """Clear uploaded data and revert to mock data."""
-    if "uploaded_sdo_list" in st.session_state:
-        del st.session_state.uploaded_sdo_list
-    if "uploaded_schools" in st.session_state:
-        del st.session_state.uploaded_schools
-    st.rerun()
-
-# ─── LOAD DATA (from session or cache) ───
-sdo_list, schools = get_active_data()
-
-# ─── COMPUTE REGIONAL AVERAGE ───
-all_region_complete = [s for s in schools if s["data_status"] != "Pending"]
-if all_region_complete:
-    regional_dim_avgs = compute_dimension_averages(all_region_complete)
-    regional_overall_avg = round(sum(s["overall_index"] for s in all_region_complete) / len(all_region_complete), 1)
+if uploaded_file is not None:
+    st.session_state.uploaded_file = uploaded_file
+    st.success("✅ File uploaded successfully. Press **'Run Analysis'** to begin processing.")
 else:
-    regional_dim_avgs = [0, 0, 0, 0, 0, 0]
-    regional_overall_avg = 0
+    # If uploader is cleared, reset analysis flag
+    st.session_state.analysis_complete = False
+    st.session_state.dashboard_rendered = False
 
-# ════════════════════════════════════════════════════════════════
-# AUTHENTICATION CHECK
-# ════════════════════════════════════════════════════════════════
+# ---- Action Buttons ----
+col1, col2 = st.columns(2)
 
-auth_status = login_status()
-
-# ─── LOGIN SCREEN ───
-if not auth_status["logged_in"]:
-    st.markdown("""
-    <div style="text-align:center;padding:60px 20px;">
-        <h1>🎓 SBM Digital Twin Dashboard</h1>
-        <p style="color:#6b7280;font-size:18px;">DepEd Region X – Northern Mindanao</p>
-        <div style="margin-top:40px;max-width:450px;margin-left:auto;margin-right:auto;">
-            <div style="background:#f8f9fa;padding:30px;border-radius:10px;border:1px solid #e5e7eb;">
-                <h3 style="margin-top:0;">🔐 Sign In</h3>
-                <div style="text-align:left;font-size:13px;color:#4b5563;background:#f1f5f9;padding:12px;border-radius:6px;margin:12px 0;">
-                    <b>Demo Credentials:</b><br>
-                    <b>Regional:</b> regional / regional123<br>
-                    <b>Division:</b> sdo_bukidnon / sdo123<br>
-                    <b>School:</b> principal_cdo / school123<br>
-                    <i style="font-size:12px;color:#6b7280;">(Copy username exactly as shown)</i>
-                </div>
-    """, unsafe_allow_html=True)
-    
-    with st.form("login_form"):
-        username = st.text_input("Username", placeholder="Enter your username")
-        password = st.text_input("Password", type="password", placeholder="Enter your password")
-        submitted = st.form_submit_button("🔑 Sign In", use_container_width=True)
-        
-        if submitted:
-            if username and password:
-                user = authenticate(username, password)
-                if user:
-                    st.session_state.user = user
-                    st.rerun()
-                else:
-                    st.error("❌ Invalid username or password.")
-            else:
-                st.warning("Please enter both username and password.")
-    
-    st.markdown("""
-            </div>
-        </div>
-        <p style="color:#9ca3af;font-size:12px;margin-top:20px;">
-            For demonstration purposes only. Real authentication will be implemented post-pilot.
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    st.stop()
-
-# ─── USER INFORMATION ───
-user = st.session_state.user
-
-if user is None:
-    st.warning("Session expired. Please log in again.")
-    st.stop()
-
-role = user.get("role", "school")
-user_name = user.get("name", "User")
-
-filtered_data = get_accessible_schools(user, sdo_list, schools)
-filtered_sdos = filtered_data["filtered_sdos"]
-filtered_schools = filtered_data["filtered_schools"]
-
-# ════════════════════════════════════════════════════════════════
-# DETERMINE SELECTED SDO
-# ════════════════════════════════════════════════════════════════
-
-selected_sdo = None
-selected_sdo_id = None
-
-if "go_to_division" in st.session_state:
-    target_div_name = st.session_state.go_to_division
-    for sdo in sdo_list:
-        if sdo["name"] == target_div_name:
-            selected_sdo = sdo
-            selected_sdo_id = sdo["id"]
-            break
-    del st.session_state.go_to_division
-
-if selected_sdo is None:
-    if is_school_head(user):
-        if filtered_schools:
-            school = filtered_schools[0]
-            selected_sdo = next((s for s in sdo_list if s["id"] == school["sdo_id"]), None)
-            selected_sdo_id = selected_sdo["id"] if selected_sdo else None
-        else:
-            st.warning("No school data available for your account.")
-            st.stop()
-    else:
-        if filtered_sdos:
-            if len(filtered_sdos) == 1:
-                selected_sdo = filtered_sdos[0]
-                selected_sdo_id = selected_sdo["id"]
-            else:
-                selected_sdo = filtered_sdos[0]
-                selected_sdo_id = selected_sdo["id"]
-        else:
-            st.warning("No divisions accessible.")
-            st.stop()
-
-# ─── COMPUTE SCHOOL DATA ───
-schools_in_sdo = get_schools_by_sdo(filtered_schools, selected_sdo_id) if selected_sdo_id else []
-complete_schools = [s for s in schools_in_sdo if s["data_status"] != "Pending"]
-dim_avgs = compute_dimension_averages(schools_in_sdo)
-
-if complete_schools:
-    overall_avg = round(sum(s["overall_index"] for s in complete_schools) / len(complete_schools), 1)
-    max_dim_idx = dim_avgs.index(max(dim_avgs))
-    min_dim_idx = dim_avgs.index(min(dim_avgs))
-else:
-    overall_avg = 0
-    max_dim_idx = 0
-    min_dim_idx = 0
-
-is_dark_mode = (st.session_state.custom_theme == "dark")
-
-# ════════════════════════════════════════════════════════════════
-# SIDEBAR
-# ════════════════════════════════════════════════════════════════
-
-with st.sidebar:
-    st.markdown(f"### 👤 {user_name}")
-    st.caption(get_accessible_divisions_summary(user))
-    st.markdown("---")
-    
-    # ── Data Source Indicator ──
-    if "uploaded_sdo_list" in st.session_state:
-        st.info("📌 **Using Uploaded Data**")
-        if st.button("🔄 Reset to Mock Data", use_container_width=True):
-            clear_active_data()
-    else:
-        st.caption("📌 Using Mock Data (for demonstration)")
-    
-    st.markdown("---")
-    st.markdown("### 🎨 Appearance")
-    col_light, col_dark = st.columns(2)
-    with col_light:
-        if st.button("☀️ Light", use_container_width=True,
-                     type="primary" if st.session_state.custom_theme == "light" else "secondary"):
-            st.session_state.custom_theme = "light"
-            st.rerun()
-    with col_dark:
-        if st.button("🌙 Dark", use_container_width=True,
-                     type="primary" if st.session_state.custom_theme == "dark" else "secondary"):
-            st.session_state.custom_theme = "dark"
-            st.rerun()
-    
-    st.markdown("---")
-    st.markdown("### 🗺️ Navigation")
-    
-    if not is_school_head(user):
-        if filtered_sdos:
-            sdo_names = [s["name"] for s in filtered_sdos]
-            if len(sdo_names) == 1:
-                st.caption(f"📋 {selected_sdo['name']}")
-            else:
-                selected_sdo_name = st.selectbox("Select Division", options=sdo_names, index=0)
-                selected_sdo = next(s for s in filtered_sdos if s["name"] == selected_sdo_name)
-                selected_sdo_id = selected_sdo["id"]
-                schools_in_sdo = get_schools_by_sdo(filtered_schools, selected_sdo_id)
-                complete_schools = [s for s in schools_in_sdo if s["data_status"] != "Pending"]
-                dim_avgs = compute_dimension_averages(schools_in_sdo)
-                if complete_schools:
-                    overall_avg = round(sum(s["overall_index"] for s in complete_schools) / len(complete_schools), 1)
-                    max_dim_idx = dim_avgs.index(max(dim_avgs))
-                    min_dim_idx = dim_avgs.index(min(dim_avgs))
-                else:
-                    overall_avg = 0
-                    max_dim_idx = 0
-                    min_dim_idx = 0
-        else:
-            st.warning("No divisions accessible.")
-            selected_sdo = None
-            selected_sdo_id = None
-    else:
-        if filtered_schools:
-            school = filtered_schools[0]
-            st.caption(f"🏫 {school['name']}")
-    
-    st.markdown("---")
-    st.markdown("### 📐 Filter by Dimension")
-    selected_dimension = st.selectbox(
-        "Highlight Dimension",
-        options=["Overall"] + DIMENSION_NAMES,
-        index=0
+with col1:
+    run_clicked = st.button(
+        "🚀 Run Analysis",
+        type="primary",
+        use_container_width=True,
+        disabled=uploaded_file is None
     )
-    
-    st.markdown("---")
-    st.markdown("### 🔍 Search School")
-    search_query = st.text_input("Type school name or ID", placeholder="e.g., Central")
-    
-    st.markdown("---")
-    st.markdown("### 📊 Data Management")
-    
-    # Download Report
-    if selected_sdo_id is not None and selected_sdo is not None:
-        report_df = generate_report_data(selected_sdo["name"], schools_in_sdo, complete_schools)
-        if report_df is not None and not report_df.empty:
-            csv_report = report_df.to_csv(index=False)
-            st.download_button(
-                label="📥 Download Report (CSV)",
-                data=csv_report,
-                file_name=f"SBM_Report_{selected_sdo['name'].replace(' ', '_')}.csv",
-                mime="text/csv",
-                use_container_width=True
-            )
-        else:
-            st.caption("No data to report.")
-    else:
-        st.caption("Select a division to download report.")
-    
-    # Download Excel Template
-    template_file = generate_excel_template()
-    st.download_button(
-        label="📋 Download Data Collection Template (Excel)",
-        data=template_file,
-        file_name="SBM_Data_Collection_Template.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+
+with col2:
+    reset_clicked = st.button(
+        "🔄 Reset Dashboard & Twin",
+        type="secondary",
         use_container_width=True
     )
-    st.caption("Template based on DepEd Order No. 007, s. 2024")
-    
-    # ─── UPLOAD SBM DATA ───
-    st.markdown("---")
-    st.markdown("### 📤 Upload SBM Data")
-    st.caption("Upload a completed Excel template to replace the current data.")
-    
-    uploaded_file = st.file_uploader(
-        "Choose an Excel file (.xlsx)",
-        type=["xlsx"],
-        key="sbm_data_upload"
-    )
-    
-    if uploaded_file is not None:
-        try:
-            # Read the uploaded file
-            df_schools = pd.read_excel(uploaded_file, sheet_name="School Information")
-            df_assessment = pd.read_excel(uploaded_file, sheet_name="SBM Assessment")
-            
-            st.success(f"✅ Successfully uploaded: {uploaded_file.name}")
-            st.caption(f"School Information: {len(df_schools)} schools")
-            st.caption(f"SBM Assessment: {len(df_assessment)} indicator scores")
-            
-            # Process the data
-            with st.spinner("Processing uploaded data..."):
-                processed = process_uploaded_data(df_schools, df_assessment)
-                set_active_data(processed["sdo_list"], processed["schools"])
-                st.success("✅ Data processed and loaded. The dashboard is now using the uploaded data.")
-                st.rerun()
-            
-        except Exception as e:
-            st.error(f"❌ Error processing file: {e}")
-    
-    # ─── DEBUG INFO ───
-    with st.expander("🔍 Debug Data Info", expanded=False):
-        st.write(f"**Data Source:** {'Uploaded' if 'uploaded_sdo_list' in st.session_state else 'Mock'}")
-        st.write(f"**Total SDOs:** {len(sdo_list)}")
-        st.write(f"**Total Schools:** {len(schools)}")
-        st.write(f"**Complete Schools:** {len([s for s in schools if s['data_status'] != 'Pending'])}")
-        st.write(f"**Pending Schools:** {len([s for s in schools if s['data_status'] == 'Pending'])}")
-        if schools:
-            sample = schools[0]
-            st.write(f"**Sample School Scores:** {sample.get('dimension_scores', [])}")
-    
-    st.markdown("---")
-    if st.button("🚪 Logout", use_container_width=True):
-        logout()
-    
-    with st.expander("📖 Glossary", expanded=False):
-        st.markdown("""
-        **SBM (School-Based Management)** – Decentralization of decision-making authority to schools.
-        **SDO (Schools Division Office)** – Local DepEd office overseeing schools in a division.
-        **SBM Dimensions** – Six key areas of school operations:
-        - Curriculum & Teaching
-        - Learning Environment
-        - Leadership
-        - Governance & Accountability
-        - Human Resource & Team Development
-        - Finance & Resource Management
-        **SBM Indicators** – 42 measurable practices and outcomes.
-        **Degree of Manifestation** – Scale (0–3):
-        - 0.0–0.9 = Not Yet Manifested
-        - 1.0–1.9 = Rarely Manifested
-        - 2.0–2.4 = Frequently Manifested
-        - 2.5–3.0 = Always Manifested
-        **Urgency Factor** – 0–1 value indicating urgency.
-        **Glow** – Animated pulsing behind SDO shields:
-        - 🔴 Red = Critical (< 1.0)
-        - 🟠 Orange = Warning (1.0–1.9)
-        - 🟡 Yellow = Monitor (2.0–2.4)
-        - ⚪ No glow = Stable (≥ 2.5)
-        """)
-    
-    st.markdown("---")
-    st.caption("SBM Digital Twin · Prototype v1.0")
-    st.caption("DepEd Region X – Northern Mindanao")
 
-# ════════════════════════════════════════════════════════════════
-# MAIN CONTENT
-# ════════════════════════════════════════════════════════════════
+# ------------------------------------------------------------------
+# 4. HANDLE BUTTON LOGIC
+# ------------------------------------------------------------------
 
-if selected_sdo_id is None:
-    st.warning("No data available for your role. Please contact your administrator.")
-    st.stop()
+# ---- Reset ----
+if reset_clicked:
+    reset_app()
+    st.rerun()
 
-st.markdown(f"## 🎓 SBM Dashboard: {selected_sdo['name']}")
-st.caption(f"Capital: {selected_sdo['capital']} · {selected_sdo['id']} schools")
+# ---- Run Analysis (Heavy processing only here) ----
+if run_clicked:
+    if uploaded_file is None:
+        st.warning("Please upload a file first.")
+    else:
+        with st.spinner("⏳ Processing SBM data and initialising Twin... Please wait."):
+            try:
+                # -------------------------------------------------------------
+                # 4a. READ THE EXCEL FILE (Two sheets)
+                # -------------------------------------------------------------
+                school_info = pd.read_excel(uploaded_file, sheet_name="School Information")
+                sbm_assessment = pd.read_excel(uploaded_file, sheet_name="SBM Assessment")
 
-# ─── KPI CARDS ───
-col1, col2, col3, col4 = st.columns(4)
-with col1:
-    st.metric("🏫 Total Schools", len(schools_in_sdo), 
-              delta=f"{len([s for s in schools_in_sdo if s['data_status']=='Pending'])} pending" 
-              if any(s['data_status']=='Pending' for s in schools_in_sdo) else None)
-with col2:
-    st.metric("📊 Overall SBM Index", f"{overall_avg:.1f} / 3.0" if overall_avg > 0 else "—")
-with col3:
-    st.metric("⬆️ Highest Dimension", DIMENSION_NAMES[max_dim_idx] if overall_avg > 0 else "—")
-with col4:
-    st.metric("⬇️ Lowest Dimension (Urgent)", DIMENSION_NAMES[min_dim_idx] if overall_avg > 0 else "—", delta_color="inverse")
+                # Store raw data in session_state (for debugging / optional display)
+                st.session_state.raw_school_info = school_info
+                st.session_state.raw_sbm_assessment = sbm_assessment
 
-# ─── SYNOPSIS ───
-synopsis_html = generate_synopsis(
-    user_role=role,
-    user_name=user_name,
-    selected_sdo=selected_sdo,
-    schools_in_sdo=schools_in_sdo,
-    complete_schools=complete_schools,
-    dim_avgs=dim_avgs,
-    overall_avg=overall_avg,
-    max_dim_idx=max_dim_idx,
-    min_dim_idx=min_dim_idx
-)
+                # -------------------------------------------------------------
+                # 4b. PROCESSING PIPELINE (Replace with your actual logic)
+                # -------------------------------------------------------------
+                # Clean School Info: drop rows with all NaN
+                clean_schools = school_info.dropna(how='all')
 
-# ─── TABS BASED ON ROLE ───
-if role == "regional":
-    tab1, tab2, tab3 = st.tabs(["📋 Executive Summary", "📊 Division Performance Matrix", "🧪 Digital Twin Sandbox"])
-    
-    with tab1:
-        from streamlit.components.v1 import html as st_html
-        wrapped_html = f"""
-        <div style="width:100%;padding:0;margin:0;box-sizing:border-box;">
-            {synopsis_html}
-        </div>
-        """
-        st_html(wrapped_html, height=900, scrolling=True)
-        
-        # ─── MAP ───
-        st.markdown("---")
-        try:
-            import folium
-            from streamlit_folium import st_folium
-            
-            map_center = [selected_sdo["lat"], selected_sdo["lng"]]
-            m = folium.Map(location=map_center, zoom_start=8, tiles="OpenStreetMap")
-            
-            for sdo in filtered_sdos:
-                add_sdo_shield(m, sdo)
-            
-            for school in schools_in_sdo:
-                add_school_dot(m, school)
-            
-            st_folium(m, width=None, height=500, key="sbm_map")
-            
-        except ImportError as e:
-            st.error(f"Missing import: {e}. Please run: pip install folium streamlit-folium")
-        except Exception as e:
-            st.error(f"Map rendering failed: {e}")
+                # Clean SBM Assessment: drop rows where Score is empty (Pending schools)
+                clean_scores = sbm_assessment.dropna(subset=['Score'], how='any')
 
-        # ─── MAP LEGEND ───
-        st.markdown("---")
-        st.markdown("""
-        <div class="custom-footnote" style="padding:14px 18px;border-radius:8px;margin-bottom:14px;">
-            <b>💡 About the Pulsing Glow:</b> The animated glow behind each SDO shield indicates <b>urgency based on the division's lowest SBM dimension score</b>.
-            <br><br>
-            <div style="display:flex;flex-wrap:wrap;gap:12px 24px;margin-top:4px;">
-                <span style="color:#dc2626;font-weight:600;">🔴 Red glow</span>
-                <span>Critical – Score &lt; 1.0</span>
-                <span class="text-muted" style="font-size:12px;">(Immediate attention needed)</span>
-            </div>
-            <div style="display:flex;flex-wrap:wrap;gap:12px 24px;">
-                <span style="color:#f97316;font-weight:600;">🟠 Orange glow</span>
-                <span>Warning – Score 1.0 – 1.9</span>
-                <span class="text-muted" style="font-size:12px;">(Monitor closely)</span>
-            </div>
-            <div style="display:flex;flex-wrap:wrap;gap:12px 24px;">
-                <span style="color:#eab308;font-weight:600;">🟡 Yellow glow</span>
-                <span>Monitor – Score 2.0 – 2.4</span>
-                <span class="text-muted" style="font-size:12px;">(Improvement needed)</span>
-            </div>
-            <div style="display:flex;flex-wrap:wrap;gap:12px 24px;">
-                <span style="font-weight:600;opacity:0.4;">⚪ No glow</span>
-                <span>Stable – Score ≥ 2.5</span>
-                <span class="text-muted" style="font-size:12px;">(Performing well)</span>
-            </div>
-            <div style="margin-top:8px;font-size:12px;opacity:0.6;">
-                The glow pulses faster and brighter for more urgent divisions.
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-        st.markdown("""
-        <div style="background-color:var(--secondary-background-color);padding:10px 16px;border-radius:8px;border-left:4px solid #22c55e;margin-bottom:14px;color:var(--text-color);">
-            <b>📏 School Dot Sizes:</b> The size of each school dot represents its <b>total enrollment (number of learners)</b>.
-            Larger dots indicate schools with more students, while smaller dots indicate schools with fewer students.
-            This helps you quickly see which schools have larger student populations.
-        </div>
-        """, unsafe_allow_html=True)
-        st.markdown("### 🗺️ Map Legend")
-        col1, col2, col3 = st.columns([1, 1, 1])
-        with col1:
-            st.markdown("""
-            **🏫 SDO Shields** (Color = Lowest Dimension Score)
-            <div style="display:flex;align-items:center;gap:8px;margin:4px 0;">
-                <span style="display:inline-block;width:20px;height:20px;background:#0d9488;clip-path:polygon(50% 0%,100% 20%,90% 80%,50% 100%,10% 80%,0% 20%);"></span>
-                <span>2.5 – 3.0 (High)</span>
-            </div>
-            <div style="display:flex;align-items:center;gap:8px;margin:4px 0;">
-                <span style="display:inline-block;width:20px;height:20px;background:#eab308;clip-path:polygon(50% 0%,100% 20%,90% 80%,50% 100%,10% 80%,0% 20%);"></span>
-                <span>2.0 – 2.4 (Medium-High)</span>
-            </div>
-            <div style="display:flex;align-items:center;gap:8px;margin:4px 0;">
-                <span style="display:inline-block;width:20px;height:20px;background:#f97316;clip-path:polygon(50% 0%,100% 20%,90% 80%,50% 100%,10% 80%,0% 20%);"></span>
-                <span>1.0 – 1.9 (Medium-Low)</span>
-            </div>
-            <div style="display:flex;align-items:center;gap:8px;margin:4px 0;">
-                <span style="display:inline-block;width:20px;height:20px;background:#dc2626;clip-path:polygon(50% 0%,100% 20%,90% 80%,50% 100%,10% 80%,0% 20%);"></span>
-                <span>0.0 – 0.9 (Low/Critical)</span>
-            </div>
-            """, unsafe_allow_html=True)
-        with col2:
-            st.markdown("""
-            **📍 School Dots** (Color = Overall SBM Level)
-            <div style="display:flex;align-items:center;gap:8px;margin:4px 0;">
-                <span style="display:inline-block;width:16px;height:16px;border-radius:50%;background:#22c55e;"></span>
-                <span>Always Manifested (2.5 – 3.0)</span>
-            </div>
-            <div style="display:flex;align-items:center;gap:8px;margin:4px 0;">
-                <span style="display:inline-block;width:16px;height:16px;border-radius:50%;background:#eab308;"></span>
-                <span>Frequently Manifested (2.0 – 2.4)</span>
-            </div>
-            <div style="display:flex;align-items:center;gap:8px;margin:4px 0;">
-                <span style="display:inline-block;width:16px;height:16px;border-radius:50%;background:#f97316;"></span>
-                <span>Rarely Manifested (1.0 – 1.9)</span>
-            </div>
-            <div style="display:flex;align-items:center;gap:8px;margin:4px 0;">
-                <span style="display:inline-block;width:16px;height:16px;border-radius:50%;background:#9ca3af;"></span>
-                <span>Not Yet Manifested (0.0 – 0.9)</span>
-            </div>
-            <div style="display:flex;align-items:center;gap:8px;margin:4px 0;">
-                <span style="display:inline-block;width:16px;height:16px;border-radius:50%;background:repeating-linear-gradient(45deg, #9ca3af, #9ca3af 3px, #d1d5db 3px, #d1d5db 6px);border:2px solid #6b7280;"></span>
-                <span>Data Pending</span>
-            </div>
-            """, unsafe_allow_html=True)
-        with col3:
-            st.markdown("""
-            **🔄 Urgency Glow** (Behind SDO Shields)
-            <div style="display:flex;align-items:center;gap:8px;margin:4px 0;">
-                <span style="display:inline-block;width:20px;height:20px;border-radius:50%;background:radial-gradient(circle, #dc2626 30%, transparent 70%);"></span>
-                <span>Critical (score < 1.0)</span>
-            </div>
-            <div style="display:flex;align-items:center;gap:8px;margin:4px 0;">
-                <span style="display:inline-block;width:20px;height:20px;border-radius:50%;background:radial-gradient(circle, #f97316 30%, transparent 70%);"></span>
-                <span>Warning (score 1.0 – 1.9)</span>
-            </div>
-            <div style="display:flex;align-items:center;gap:8px;margin:4px 0;font-size:12px;color:#6b7280;">
-                <span style="display:inline-block;width:20px;height:20px;border-radius:50%;background:radial-gradient(circle, #eab308 30%, transparent 70%);"></span>
-                <span>Monitor (score 2.0 – 2.4)</span>
-            </div>
-            <div style="display:flex;align-items:center;gap:8px;margin:4px 0;font-size:12px;color:#6b7280;">
-                <span style="display:inline-block;width:20px;height:20px;border-radius:50%;background:transparent;border:1px solid #d1d5db;"></span>
-                <span>Stable (score ≥ 2.5)</span>
-            </div>
-            """, unsafe_allow_html=True)
-        st.caption("💡 Click on any SDO shield to zoom in and view its schools. Hover over markers for more details.")
-        
-        # ─── BOTTOM TABS ───
-        st.markdown("---")
-        btab1, btab2, btab3 = st.tabs(["📋 Indicators", "📊 Radar Chart", "📈 Historical Trend"])
-        with btab1:
-            df = create_indicators_table(schools_in_sdo)
-            if not df.empty:
-                st.dataframe(
-                    df[["#", "Indicator", "Dimension", "Score", "Status"]],
-                    column_config={"Score": st.column_config.NumberColumn(format="%.1f")},
-                    hide_index=True,
-                    width='stretch'
-                )
-                st.caption(f"* Average across {len(complete_schools)} complete schools in this division")
-            else:
-                st.info("No complete SBM data available for this division.")
-        with btab2:
-            if any(dim_avgs) and any(regional_dim_avgs):
-                fig = create_radar_chart(dim_avgs, regional_dim_avgs)
-                st.plotly_chart(fig, width='stretch')
-            else:
-                st.info("No dimension data available for this division.")
-        with btab3:
-            if complete_schools:
-                random.seed(42)
-                current_avg = overall_avg
-                years = ["2023-2024", "2022-2023", "2021-2022"]
-                values = [
-                    current_avg,
-                    round(max(0, min(3, current_avg - 0.2 + (random.random() - 0.5) * 0.4)), 1),
-                    round(max(0, min(3, current_avg - 0.4 + (random.random() - 0.5) * 0.4)), 1)
-                ]
-                fig = create_trend_chart(years, values)
-                st.plotly_chart(fig, width='stretch')
-            else:
-                st.info("No historical data available for this division.")
-    
-    with tab2:
-        # Division Performance Matrix
-        st.markdown("### 📊 Division Performance Matrix")
-        st.caption("Performance of all 14 divisions across the 6 SBM dimensions. Scores are rounded to 1 decimal place.")
-        
-        matrix_data = []
-        for sdo in sdo_list:
-            dim_scores = [round(x, 1) for x in sdo["dimension_scores"]]
-            row = {
-                "Division": sdo["name"].replace("SDO ", ""),
-                "Curriculum & Teaching": dim_scores[0],
-                "Learning Environment": dim_scores[1],
-                "Leadership": dim_scores[2],
-                "Governance & Accountability": dim_scores[3],
-                "HR & Team Development": dim_scores[4],
-                "Finance & Resource Mgmt.": dim_scores[5]
-            }
-            matrix_data.append(row)
-        
-        df = pd.DataFrame(matrix_data)
-        avg_row = {"Division": "📊 REGIONAL AVERAGE"}
-        for dim in df.columns[1:]:
-            avg_row[dim] = round(df[dim].mean(), 1)
-        df = pd.concat([df, pd.DataFrame([avg_row])], ignore_index=True)
-        
-        def color_cell(val):
-            if pd.isna(val):
-                return ''
-            if val >= 2.5:
-                return 'background-color: #22c55e; color: white; font-weight: bold;'
-            elif val >= 2.0:
-                return 'background-color: #eab308; color: white; font-weight: bold;'
-            else:
-                return 'background-color: #dc2626; color: white; font-weight: bold;'
-        
-        styled_df = df.style.map(color_cell, subset=df.columns[1:]).format("{:.1f}", subset=df.columns[1:])
-        html_table = styled_df.to_html(index=False, escape=False)
-        st.markdown(html_table, unsafe_allow_html=True)
-        
-        st.markdown("""
-        <div style="display:flex;gap:16px;font-size:13px;margin:8px 0;">
-            <span>🟢 <b>Strong</b> (≥ 2.5)</span>
-            <span>🟡 <b>Moderate</b> (2.0 – 2.4)</span>
-            <span>🔴 <b>Weak</b> (< 2.0)</span>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        st.markdown("### 📈 Summary Statistics")
-        summary_data = []
-        for dim in DIMENSION_NAMES:
-            scores = [sdo["dimension_scores"][DIMENSION_NAMES.index(dim)] for sdo in sdo_list]
-            strong = sum(1 for x in scores if x >= 2.5)
-            moderate = sum(1 for x in scores if 2.0 <= x < 2.5)
-            weak = sum(1 for x in scores if x < 2.0)
-            summary_data.append({
-                "Dimension": dim,
-                "Strong (≥2.5)": strong,
-                "Moderate (2.0-2.4)": moderate,
-                "Weak (<2.0)": weak
-            })
-        summary_df = pd.DataFrame(summary_data)
-        st.dataframe(summary_df, width='stretch', hide_index=True)
-        
-        st.markdown("### 🔍 Jump to Division")
-        col_sel, col_btn = st.columns([3, 1])
-        with col_sel:
-            division_names = [sdo["name"] for sdo in sdo_list]
-            selected_div_name = st.selectbox("Select a division to view its detailed dashboard:", division_names)
-        with col_btn:
-            if st.button("🚀 Go to Division", use_container_width=True):
-                st.session_state.go_to_division = selected_div_name
-                st.rerun()
-    
-    with tab3:
-        render_sandbox(sdo_list, selected_sdo, schools_in_sdo, complete_schools, dim_avgs, overall_avg)
+                # Compute dimension averages (this is a minimal but useful summary)
+                dimension_avg = clean_scores.groupby('Dimension')['Score'].mean().reset_index()
 
-elif role == "division":
-    tab1, tab2, tab3 = st.tabs(["📋 Executive Summary", "📊 School Performance Dashboard", "🧪 Digital Twin Sandbox"])
-    
-    with tab1:
-        from streamlit.components.v1 import html as st_html
-        wrapped_html = f"""
-        <div style="width:100%;padding:0;margin:0;box-sizing:border-box;">
-            {synopsis_html}
-        </div>
-        """
-        st_html(wrapped_html, height=900, scrolling=True)
-        
-        # ─── MAP ───
-        st.markdown("---")
-        try:
-            import folium
-            from streamlit_folium import st_folium
-            
-            map_center = [selected_sdo["lat"], selected_sdo["lng"]]
-            m = folium.Map(location=map_center, zoom_start=8, tiles="OpenStreetMap")
-            
-            for sdo in filtered_sdos:
-                add_sdo_shield(m, sdo)
-            
-            for school in schools_in_sdo:
-                add_school_dot(m, school)
-            
-            st_folium(m, width=None, height=500, key="sbm_map")
-            
-        except ImportError as e:
-            st.error(f"Missing import: {e}. Please run: pip install folium streamlit-folium")
-        except Exception as e:
-            st.error(f"Map rendering failed: {e}")
+                # (Optional) Merge to get school-level dimension scores
+                # school_dimension_scores = clean_scores.merge(clean_schools, on='School ID', how='left')
 
-        # ─── MAP LEGEND ───
-        st.markdown("---")
-        st.markdown("""
-        <div class="custom-footnote" style="padding:14px 18px;border-radius:8px;margin-bottom:14px;">
-            <b>💡 About the Pulsing Glow:</b> The animated glow behind each SDO shield indicates <b>urgency based on the division's lowest SBM dimension score</b>.
-            <br><br>
-            <div style="display:flex;flex-wrap:wrap;gap:12px 24px;margin-top:4px;">
-                <span style="color:#dc2626;font-weight:600;">🔴 Red glow</span>
-                <span>Critical – Score &lt; 1.0</span>
-                <span class="text-muted" style="font-size:12px;">(Immediate attention needed)</span>
-            </div>
-            <div style="display:flex;flex-wrap:wrap;gap:12px 24px;">
-                <span style="color:#f97316;font-weight:600;">🟠 Orange glow</span>
-                <span>Warning – Score 1.0 – 1.9</span>
-                <span class="text-muted" style="font-size:12px;">(Monitor closely)</span>
-            </div>
-            <div style="display:flex;flex-wrap:wrap;gap:12px 24px;">
-                <span style="color:#eab308;font-weight:600;">🟡 Yellow glow</span>
-                <span>Monitor – Score 2.0 – 2.4</span>
-                <span class="text-muted" style="font-size:12px;">(Improvement needed)</span>
-            </div>
-            <div style="display:flex;flex-wrap:wrap;gap:12px 24px;">
-                <span style="font-weight:600;opacity:0.4;">⚪ No glow</span>
-                <span>Stable – Score ≥ 2.5</span>
-                <span class="text-muted" style="font-size:12px;">(Performing well)</span>
-            </div>
-            <div style="margin-top:8px;font-size:12px;opacity:0.6;">
-                The glow pulses faster and brighter for more urgent divisions.
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-        st.markdown("""
-        <div style="background-color:var(--secondary-background-color);padding:10px 16px;border-radius:8px;border-left:4px solid #22c55e;margin-bottom:14px;color:var(--text-color);">
-            <b>📏 School Dot Sizes:</b> The size of each school dot represents its <b>total enrollment (number of learners)</b>.
-            Larger dots indicate schools with more students, while smaller dots indicate schools with fewer students.
-            This helps you quickly see which schools have larger student populations.
-        </div>
-        """, unsafe_allow_html=True)
-        st.markdown("### 🗺️ Map Legend")
-        col1, col2, col3 = st.columns([1, 1, 1])
-        with col1:
-            st.markdown("""
-            **🏫 SDO Shields** (Color = Lowest Dimension Score)
-            <div style="display:flex;align-items:center;gap:8px;margin:4px 0;">
-                <span style="display:inline-block;width:20px;height:20px;background:#0d9488;clip-path:polygon(50% 0%,100% 20%,90% 80%,50% 100%,10% 80%,0% 20%);"></span>
-                <span>2.5 – 3.0 (High)</span>
-            </div>
-            <div style="display:flex;align-items:center;gap:8px;margin:4px 0;">
-                <span style="display:inline-block;width:20px;height:20px;background:#eab308;clip-path:polygon(50% 0%,100% 20%,90% 80%,50% 100%,10% 80%,0% 20%);"></span>
-                <span>2.0 – 2.4 (Medium-High)</span>
-            </div>
-            <div style="display:flex;align-items:center;gap:8px;margin:4px 0;">
-                <span style="display:inline-block;width:20px;height:20px;background:#f97316;clip-path:polygon(50% 0%,100% 20%,90% 80%,50% 100%,10% 80%,0% 20%);"></span>
-                <span>1.0 – 1.9 (Medium-Low)</span>
-            </div>
-            <div style="display:flex;align-items:center;gap:8px;margin:4px 0;">
-                <span style="display:inline-block;width:20px;height:20px;background:#dc2626;clip-path:polygon(50% 0%,100% 20%,90% 80%,50% 100%,10% 80%,0% 20%);"></span>
-                <span>0.0 – 0.9 (Low/Critical)</span>
-            </div>
-            """, unsafe_allow_html=True)
-        with col2:
-            st.markdown("""
-            **📍 School Dots** (Color = Overall SBM Level)
-            <div style="display:flex;align-items:center;gap:8px;margin:4px 0;">
-                <span style="display:inline-block;width:16px;height:16px;border-radius:50%;background:#22c55e;"></span>
-                <span>Always Manifested (2.5 – 3.0)</span>
-            </div>
-            <div style="display:flex;align-items:center;gap:8px;margin:4px 0;">
-                <span style="display:inline-block;width:16px;height:16px;border-radius:50%;background:#eab308;"></span>
-                <span>Frequently Manifested (2.0 – 2.4)</span>
-            </div>
-            <div style="display:flex;align-items:center;gap:8px;margin:4px 0;">
-                <span style="display:inline-block;width:16px;height:16px;border-radius:50%;background:#f97316;"></span>
-                <span>Rarely Manifested (1.0 – 1.9)</span>
-            </div>
-            <div style="display:flex;align-items:center;gap:8px;margin:4px 0;">
-                <span style="display:inline-block;width:16px;height:16px;border-radius:50%;background:#9ca3af;"></span>
-                <span>Not Yet Manifested (0.0 – 0.9)</span>
-            </div>
-            <div style="display:flex;align-items:center;gap:8px;margin:4px 0;">
-                <span style="display:inline-block;width:16px;height:16px;border-radius:50%;background:repeating-linear-gradient(45deg, #9ca3af, #9ca3af 3px, #d1d5db 3px, #d1d5db 6px);border:2px solid #6b7280;"></span>
-                <span>Data Pending</span>
-            </div>
-            """, unsafe_allow_html=True)
-        with col3:
-            st.markdown("""
-            **🔄 Urgency Glow** (Behind SDO Shields)
-            <div style="display:flex;align-items:center;gap:8px;margin:4px 0;">
-                <span style="display:inline-block;width:20px;height:20px;border-radius:50%;background:radial-gradient(circle, #dc2626 30%, transparent 70%);"></span>
-                <span>Critical (score < 1.0)</span>
-            </div>
-            <div style="display:flex;align-items:center;gap:8px;margin:4px 0;">
-                <span style="display:inline-block;width:20px;height:20px;border-radius:50%;background:radial-gradient(circle, #f97316 30%, transparent 70%);"></span>
-                <span>Warning (score 1.0 – 1.9)</span>
-            </div>
-            <div style="display:flex;align-items:center;gap:8px;margin:4px 0;font-size:12px;color:#6b7280;">
-                <span style="display:inline-block;width:20px;height:20px;border-radius:50%;background:radial-gradient(circle, #eab308 30%, transparent 70%);"></span>
-                <span>Monitor (score 2.0 – 2.4)</span>
-            </div>
-            <div style="display:flex;align-items:center;gap:8px;margin:4px 0;font-size:12px;color:#6b7280;">
-                <span style="display:inline-block;width:20px;height:20px;border-radius:50%;background:transparent;border:1px solid #d1d5db;"></span>
-                <span>Stable (score ≥ 2.5)</span>
-            </div>
-            """, unsafe_allow_html=True)
-        st.caption("💡 Click on any SDO shield to zoom in and view its schools. Hover over markers for more details.")
-        
-        # ─── BOTTOM TABS ───
-        st.markdown("---")
-        btab1, btab2, btab3 = st.tabs(["📋 Indicators", "📊 Radar Chart", "📈 Historical Trend"])
-        with btab1:
-            df = create_indicators_table(schools_in_sdo)
-            if not df.empty:
-                st.dataframe(
-                    df[["#", "Indicator", "Dimension", "Score", "Status"]],
-                    column_config={"Score": st.column_config.NumberColumn(format="%.1f")},
-                    hide_index=True,
-                    width='stretch'
-                )
-                st.caption(f"* Average across {len(complete_schools)} complete schools in this division")
-            else:
-                st.info("No complete SBM data available for this division.")
-        with btab2:
-            if any(dim_avgs) and any(regional_dim_avgs):
-                fig = create_radar_chart(dim_avgs, regional_dim_avgs)
-                st.plotly_chart(fig, width='stretch')
-            else:
-                st.info("No dimension data available for this division.")
-        with btab3:
-            if complete_schools:
-                random.seed(42)
-                current_avg = overall_avg
-                years = ["2023-2024", "2022-2023", "2021-2022"]
-                values = [
-                    current_avg,
-                    round(max(0, min(3, current_avg - 0.2 + (random.random() - 0.5) * 0.4)), 1),
-                    round(max(0, min(3, current_avg - 0.4 + (random.random() - 0.5) * 0.4)), 1)
-                ]
-                fig = create_trend_chart(years, values)
-                st.plotly_chart(fig, width='stretch')
-            else:
-                st.info("No historical data available for this division.")
-    
-    with tab2:
-        # School Performance Dashboard
-        st.markdown("### 📊 School Performance Dashboard")
-        st.caption(f"Detailed school-level performance for {selected_sdo['name']}.")
-        
-        # ─── Bar Chart: Division vs Regional Overall SBM Index ───
-        st.markdown("#### 🏆 Division vs Regional Overall SBM Index")
-        import plotly.graph_objects as go
-        fig = go.Figure()
-        
-        fig.add_trace(go.Bar(
-            name="Division",
-            x=["SBM Index"],
-            y=[overall_avg],
-            marker_color="#0033A0",
-            text=[f"{overall_avg:.1f}"],
-            textposition='auto',
-            width=0.4
-        ))
-        
-        fig.add_trace(go.Bar(
-            name="Region X",
-            x=["SBM Index"],
-            y=[regional_overall_avg],
-            marker_color="#9CA3AF",
-            text=[f"{regional_overall_avg:.1f}"],
-            textposition='auto',
-            width=0.4
-        ))
-        
-        fig.update_layout(
-            height=300,
-            margin=dict(l=40, r=40, t=20, b=40),
-            legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='center', x=0.5),
-            yaxis=dict(range=[0, 3.5], tickvals=[0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0]),
-            xaxis=dict(showticklabels=False),
-            bargap=0.5,
-            bargroupgap=0.2,
-            plot_bgcolor='rgba(0,0,0,0)',
-            paper_bgcolor='rgba(0,0,0,0)'
+                # Store processed results
+                st.session_state.processed_school_data = clean_schools
+                st.session_state.processed_sbm_scores = clean_scores
+                st.session_state.dimension_averages = dimension_avg
+
+                # -------------------------------------------------------------
+                # 4c. CALL YOUR DIGITAL TWIN SIMULATION (Optional)
+                # -------------------------------------------------------------
+                # Safely attempt to import and run the twin.
+                # If the import fails, we simply skip it and show a placeholder.
+                twin_results = None
+                try:
+                    # Attempt to import your twin UI (if it exists)
+                    # Adjust the import path to match your project structure.
+                    from utils.twin_ui import render_twin  # example function name
+                    # twin_results = render_twin(clean_scores, clean_schools)
+                    st.session_state.twin_results = "Twin executed successfully (placeholder)."
+                except ImportError as e:
+                    # If the import fails, we don't crash the whole app.
+                    st.session_state.twin_results = f"Twin module not loaded: {e}"
+                except Exception as e:
+                    st.session_state.twin_results = f"Twin execution error: {e}"
+
+                # Mark analysis as complete so the dashboard renders
+                st.session_state.analysis_complete = True
+                st.session_state.dashboard_rendered = False  # force fresh render
+
+                st.success("✅ Analysis complete! Loading dashboard...")
+                st.rerun()  # Rerun to display results in a clean state
+
+            except Exception as e:
+                # If any error occurs, we display it but DO NOT re-run automatically.
+                st.error(f"❌ Processing failed: {str(e)}")
+                st.session_state.analysis_complete = False
+                # The app remains stable; user can fix the file or reset.
+
+# ------------------------------------------------------------------
+# 5. RENDER THE DASHBOARD (Only when analysis is complete)
+# ------------------------------------------------------------------
+if st.session_state.get("analysis_complete", False):
+    st.divider()
+    st.subheader("📊 Dashboard & Twin Output")
+
+    # Display dimension averages
+    if "dimension_averages" in st.session_state:
+        df_dim = st.session_state.dimension_averages
+        st.dataframe(df_dim, use_container_width=True)
+
+        # Plot with Plotly for a nicer view
+        fig = px.bar(
+            df_dim,
+            x="Dimension",
+            y="Score",
+            title="Average Score per SBM Dimension",
+            color="Dimension",
+            text="Score"
         )
-        
-        diff = overall_avg - regional_overall_avg
-        if diff > 0:
-            diff_text = f"📈 Division is {diff:.1f} points above regional average"
-            diff_color = "#22c55e"
-        elif diff < 0:
-            diff_text = f"📉 Division is {abs(diff):.1f} points below regional average"
-            diff_color = "#dc2626"
-        else:
-            diff_text = "📊 Division is at par with regional average"
-            diff_color = "#eab308"
-        
-        st.plotly_chart(fig, width='stretch')
-        st.markdown(f"""
-        <div style="text-align:center;padding:8px;font-size:15px;font-weight:500;color:{diff_color};">
-            {diff_text}
-        </div>
-        """, unsafe_allow_html=True)
-        
-        # ─── Distribution per dimension ───
-        st.markdown("#### 📈 Distribution of Schools by Performance Level")
-        dist_data = []
-        for dim in DIMENSION_NAMES:
-            dim_idx = DIMENSION_NAMES.index(dim)
-            scores = [s["dimension_scores"][dim_idx] for s in complete_schools]
-            strong = sum(1 for x in scores if x >= 2.5)
-            moderate = sum(1 for x in scores if 2.0 <= x < 2.5)
-            weak = sum(1 for x in scores if x < 2.0)
-            dist_data.append({
-                "Dimension": dim,
-                "Strong (≥2.5)": strong,
-                "Moderate (2.0-2.4)": moderate,
-                "Weak (<2.0)": weak
-            })
-        dist_df = pd.DataFrame(dist_data)
-        st.dataframe(dist_df, width='stretch', hide_index=True)
-        
-        # ─── Bar chart ───
-        fig2 = go.Figure()
-        for level, color in [("Strong (≥2.5)", "#22c55e"), ("Moderate (2.0-2.4)", "#eab308"), ("Weak (<2.0)", "#dc2626")]:
-            fig2.add_trace(go.Bar(
-                name=level,
-                x=dist_df["Dimension"],
-                y=dist_df[level],
-                marker_color=color,
-                text=dist_df[level],
-                textposition='auto'
-            ))
-        fig2.update_layout(
-            barmode='group',
-            height=400,
-            margin=dict(l=40, r=40, t=20, b=40),
-            legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='center', x=0.5),
-            xaxis=dict(tickangle=-15)
-        )
-        st.plotly_chart(fig2, width='stretch')
-        
-        # ─── Paginated, searchable table ───
-        st.markdown("#### 📋 School List")
-        
-        school_rows = []
-        for s in schools_in_sdo:
-            if s["data_status"] == "Pending":
-                overall_score = "—"
-                dim_scores = ["—"] * 6
-            else:
-                overall_score = round(s["overall_index"], 1)
-                dim_scores = [round(x, 1) for x in s["dimension_scores"]]
-            school_rows.append({
-                "School": s["name"],
-                "Type": s["type"],
-                "Overall SBM Index": overall_score,
-                "Curriculum & Teaching": dim_scores[0],
-                "Learning Environment": dim_scores[1],
-                "Leadership": dim_scores[2],
-                "Governance & Accountability": dim_scores[3],
-                "HR & Team Development": dim_scores[4],
-                "Finance & Resource Mgmt.": dim_scores[5],
-                "Data Status": s["data_status"],
-                "School ID": s["id"]
-            })
-        table_df = pd.DataFrame(school_rows)
-        
-        if search_query:
-            filtered_table = table_df[table_df["School"].str.contains(search_query, case=False, na=False)]
-        else:
-            filtered_table = table_df
-        
-        display_df = filtered_table.drop(columns=["School ID"])
-        
-        page_size = 20
-        total_rows = len(display_df)
-        total_pages = max(1, (total_rows + page_size - 1) // page_size)
-        
-        if "school_page" not in st.session_state:
-            st.session_state.school_page = 1
-        
-        if total_pages > 1:
-            cols = st.columns([1, 3, 1])
-            with cols[0]:
-                if st.button("◀ Previous", disabled=(st.session_state.school_page <= 1)):
-                    st.session_state.school_page -= 1
-                    st.rerun()
-            with cols[1]:
-                st.caption(f"Page {st.session_state.school_page} of {total_pages}")
-            with cols[2]:
-                if st.button("Next ▶", disabled=(st.session_state.school_page >= total_pages)):
-                    st.session_state.school_page += 1
-                    st.rerun()
-        
-        start_idx = (st.session_state.school_page - 1) * page_size
-        end_idx = min(start_idx + page_size, total_rows)
-        page_df = display_df.iloc[start_idx:end_idx].copy()
-        
-        numeric_cols = ["Overall SBM Index", "Curriculum & Teaching", "Learning Environment", 
-                        "Leadership", "Governance & Accountability", "HR & Team Development", 
-                        "Finance & Resource Mgmt."]
-        for col in numeric_cols:
-            if col in page_df.columns:
-                page_df[col] = pd.to_numeric(page_df[col], errors='coerce')
-                page_df[col] = page_df[col].round(1)
-        
-        def color_score(val):
-            if pd.isna(val):
-                return ''
-            if val >= 2.5:
-                return 'background-color: #22c55e; color: white; font-weight: bold;'
-            elif val >= 2.0:
-                return 'background-color: #eab308; color: white; font-weight: bold;'
-            else:
-                return 'background-color: #dc2626; color: white; font-weight: bold;'
-        
-        styled_page = page_df.style.map(color_score, subset=numeric_cols)
-        styled_page = styled_page.format("{:.1f}", subset=numeric_cols)
-        
-        st.dataframe(styled_page, width='stretch', height=400)
-        
-        st.markdown("""
-        <div style="display:flex;gap:16px;font-size:13px;margin:8px 0;">
-            <span>🟢 <b>Strong</b> (≥ 2.5)</span>
-            <span>🟡 <b>Moderate</b> (2.0 – 2.4)</span>
-            <span>🔴 <b>Weak</b> (< 2.0)</span>
-            <span>⚪ <b>Pending</b> (No data)</span>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        if len(page_df) == 0:
-            st.info("No schools match your search criteria.")
-        
-        st.markdown("#### 🔍 Jump to School")
-        col_school, col_school_btn = st.columns([3, 1])
-        with col_school:
-            school_names = [s["name"] for s in schools_in_sdo]
-            selected_school_name = st.selectbox("Select a school to view its detailed dashboard:", school_names)
-        with col_school_btn:
-            if st.button("🚀 Go to School", use_container_width=True):
-                st.info(f"Navigating to {selected_school_name} (feature coming soon)")
-    
-    with tab3:
-        render_sandbox(sdo_list, selected_sdo, schools_in_sdo, complete_schools, dim_avgs, overall_avg)
+        fig.update_traces(texttemplate='%{text:.2f}', textposition='outside')
+        fig.update_layout(uniformtext_minsize=8, uniformtext_mode='hide')
+        st.plotly_chart(fig, use_container_width=True)
+
+    # Display a sample of the processed SBM scores
+    with st.expander("🔍 View Processed SBM Assessment Data"):
+        if "processed_sbm_scores" in st.session_state:
+            st.dataframe(st.session_state.processed_sbm_scores.head(50))
+
+    with st.expander("🏫 View School Information"):
+        if "processed_school_data" in st.session_state:
+            st.dataframe(st.session_state.processed_school_data)
+
+    # Display Twin results (if any)
+    if "twin_results" in st.session_state:
+        with st.expander("🤖 Digital Twin Output"):
+            st.write(st.session_state.twin_results)
+
+    st.session_state.dashboard_rendered = True
+
+elif uploaded_file is not None and not st.session_state.analysis_complete:
+    # File uploaded but not analysed yet
+    st.info("📌 File ready. Click **'Run Analysis'** to process.")
 
 else:
-    # School head: no tabs
-    from streamlit.components.v1 import html as st_html
-    wrapped_html = f"""
-    <div style="width:100%;padding:0;margin:0;box-sizing:border-box;">
-        {synopsis_html}
-    </div>
-    """
-    st_html(wrapped_html, height=900, scrolling=True)
+    # Default state – nothing uploaded
+    st.info("🔄 Ready. Please upload an Excel file and click **'Run Analysis'**.")
 
-    # ─── MAP ───
-    st.markdown("---")
-    try:
-        import folium
-        from streamlit_folium import st_folium
-        
-        map_center = [selected_sdo["lat"], selected_sdo["lng"]]
-        m = folium.Map(location=map_center, zoom_start=8, tiles="OpenStreetMap")
-        
-        for sdo in filtered_sdos:
-            add_sdo_shield(m, sdo)
-        
-        for school in schools_in_sdo:
-            add_school_dot(m, school)
-        
-        st_folium(m, width=None, height=500, key="sbm_map")
-        
-    except ImportError as e:
-        st.error(f"Missing import: {e}. Please run: pip install folium streamlit-folium")
-    except Exception as e:
-        st.error(f"Map rendering failed: {e}")
-
-    # ─── MAP LEGEND ───
-    st.markdown("---")
-    st.markdown("""
-    <div class="custom-footnote" style="padding:14px 18px;border-radius:8px;margin-bottom:14px;">
-        <b>💡 About the Pulsing Glow:</b> The animated glow behind each SDO shield indicates <b>urgency based on the division's lowest SBM dimension score</b>.
-        <br><br>
-        <div style="display:flex;flex-wrap:wrap;gap:12px 24px;margin-top:4px;">
-            <span style="color:#dc2626;font-weight:600;">🔴 Red glow</span>
-            <span>Critical – Score &lt; 1.0</span>
-            <span class="text-muted" style="font-size:12px;">(Immediate attention needed)</span>
-        </div>
-        <div style="display:flex;flex-wrap:wrap;gap:12px 24px;">
-            <span style="color:#f97316;font-weight:600;">🟠 Orange glow</span>
-            <span>Warning – Score 1.0 – 1.9</span>
-            <span class="text-muted" style="font-size:12px;">(Monitor closely)</span>
-        </div>
-        <div style="display:flex;flex-wrap:wrap;gap:12px 24px;">
-            <span style="color:#eab308;font-weight:600;">🟡 Yellow glow</span>
-            <span>Monitor – Score 2.0 – 2.4</span>
-            <span class="text-muted" style="font-size:12px;">(Improvement needed)</span>
-        </div>
-        <div style="display:flex;flex-wrap:wrap;gap:12px 24px;">
-            <span style="font-weight:600;opacity:0.4;">⚪ No glow</span>
-            <span>Stable – Score ≥ 2.5</span>
-            <span class="text-muted" style="font-size:12px;">(Performing well)</span>
-        </div>
-        <div style="margin-top:8px;font-size:12px;opacity:0.6;">
-            The glow pulses faster and brighter for more urgent divisions.
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-    st.markdown("""
-    <div style="background-color:var(--secondary-background-color);padding:10px 16px;border-radius:8px;border-left:4px solid #22c55e;margin-bottom:14px;color:var(--text-color);">
-        <b>📏 School Dot Sizes:</b> The size of each school dot represents its <b>total enrollment (number of learners)</b>.
-        Larger dots indicate schools with more students, while smaller dots indicate schools with fewer students.
-        This helps you quickly see which schools have larger student populations.
-    </div>
-    """, unsafe_allow_html=True)
-    st.markdown("### 🗺️ Map Legend")
-    col1, col2, col3 = st.columns([1, 1, 1])
-    with col1:
-        st.markdown("""
-        **🏫 SDO Shields** (Color = Lowest Dimension Score)
-        <div style="display:flex;align-items:center;gap:8px;margin:4px 0;">
-            <span style="display:inline-block;width:20px;height:20px;background:#0d9488;clip-path:polygon(50% 0%,100% 20%,90% 80%,50% 100%,10% 80%,0% 20%);"></span>
-            <span>2.5 – 3.0 (High)</span>
-        </div>
-        <div style="display:flex;align-items:center;gap:8px;margin:4px 0;">
-            <span style="display:inline-block;width:20px;height:20px;background:#eab308;clip-path:polygon(50% 0%,100% 20%,90% 80%,50% 100%,10% 80%,0% 20%);"></span>
-            <span>2.0 – 2.4 (Medium-High)</span>
-        </div>
-        <div style="display:flex;align-items:center;gap:8px;margin:4px 0;">
-            <span style="display:inline-block;width:20px;height:20px;background:#f97316;clip-path:polygon(50% 0%,100% 20%,90% 80%,50% 100%,10% 80%,0% 20%);"></span>
-            <span>1.0 – 1.9 (Medium-Low)</span>
-        </div>
-        <div style="display:flex;align-items:center;gap:8px;margin:4px 0;">
-            <span style="display:inline-block;width:20px;height:20px;background:#dc2626;clip-path:polygon(50% 0%,100% 20%,90% 80%,50% 100%,10% 80%,0% 20%);"></span>
-            <span>0.0 – 0.9 (Low/Critical)</span>
-        </div>
-        """, unsafe_allow_html=True)
-    with col2:
-        st.markdown("""
-        **📍 School Dots** (Color = Overall SBM Level)
-        <div style="display:flex;align-items:center;gap:8px;margin:4px 0;">
-            <span style="display:inline-block;width:16px;height:16px;border-radius:50%;background:#22c55e;"></span>
-            <span>Always Manifested (2.5 – 3.0)</span>
-        </div>
-        <div style="display:flex;align-items:center;gap:8px;margin:4px 0;">
-            <span style="display:inline-block;width:16px;height:16px;border-radius:50%;background:#eab308;"></span>
-            <span>Frequently Manifested (2.0 – 2.4)</span>
-        </div>
-        <div style="display:flex;align-items:center;gap:8px;margin:4px 0;">
-            <span style="display:inline-block;width:16px;height:16px;border-radius:50%;background:#f97316;"></span>
-            <span>Rarely Manifested (1.0 – 1.9)</span>
-        </div>
-        <div style="display:flex;align-items:center;gap:8px;margin:4px 0;">
-            <span style="display:inline-block;width:16px;height:16px;border-radius:50%;background:#9ca3af;"></span>
-            <span>Not Yet Manifested (0.0 – 0.9)</span>
-        </div>
-        <div style="display:flex;align-items:center;gap:8px;margin:4px 0;">
-            <span style="display:inline-block;width:16px;height:16px;border-radius:50%;background:repeating-linear-gradient(45deg, #9ca3af, #9ca3af 3px, #d1d5db 3px, #d1d5db 6px);border:2px solid #6b7280;"></span>
-            <span>Data Pending</span>
-        </div>
-        """, unsafe_allow_html=True)
-    with col3:
-        st.markdown("""
-        **🔄 Urgency Glow** (Behind SDO Shields)
-        <div style="display:flex;align-items:center;gap:8px;margin:4px 0;">
-            <span style="display:inline-block;width:20px;height:20px;border-radius:50%;background:radial-gradient(circle, #dc2626 30%, transparent 70%);"></span>
-            <span>Critical (score < 1.0)</span>
-        </div>
-        <div style="display:flex;align-items:center;gap:8px;margin:4px 0;">
-            <span style="display:inline-block;width:20px;height:20px;border-radius:50%;background:radial-gradient(circle, #f97316 30%, transparent 70%);"></span>
-            <span>Warning (score 1.0 – 1.9)</span>
-        </div>
-        <div style="display:flex;align-items:center;gap:8px;margin:4px 0;font-size:12px;color:#6b7280;">
-            <span style="display:inline-block;width:20px;height:20px;border-radius:50%;background:radial-gradient(circle, #eab308 30%, transparent 70%);"></span>
-            <span>Monitor (score 2.0 – 2.4)</span>
-        </div>
-        <div style="display:flex;align-items:center;gap:8px;margin:4px 0;font-size:12px;color:#6b7280;">
-            <span style="display:inline-block;width:20px;height:20px;border-radius:50%;background:transparent;border:1px solid #d1d5db;"></span>
-            <span>Stable (score ≥ 2.5)</span>
-        </div>
-        """, unsafe_allow_html=True)
-    st.caption("💡 Click on any SDO shield to zoom in and view its schools. Hover over markers for more details.")
-
-    # ─── BOTTOM TABS ───
-    st.markdown("---")
-    btab1, btab2, btab3 = st.tabs(["📋 Indicators", "📊 Radar Chart", "📈 Historical Trend"])
-    with btab1:
-        df = create_indicators_table(schools_in_sdo)
-        if not df.empty:
-            st.dataframe(
-                df[["#", "Indicator", "Dimension", "Score", "Status"]],
-                column_config={"Score": st.column_config.NumberColumn(format="%.1f")},
-                hide_index=True,
-                width='stretch'
-            )
-            st.caption(f"* Average across {len(complete_schools)} complete schools in this division")
-        else:
-            st.info("No complete SBM data available for this division.")
-    with btab2:
-        if any(dim_avgs) and any(regional_dim_avgs):
-            fig = create_radar_chart(dim_avgs, regional_dim_avgs)
-            st.plotly_chart(fig, width='stretch')
-        else:
-            st.info("No dimension data available for this division.")
-    with btab3:
-        if complete_schools:
-            random.seed(42)
-            current_avg = overall_avg
-            years = ["2023-2024", "2022-2023", "2021-2022"]
-            values = [
-                current_avg,
-                round(max(0, min(3, current_avg - 0.2 + (random.random() - 0.5) * 0.4)), 1),
-                round(max(0, min(3, current_avg - 0.4 + (random.random() - 0.5) * 0.4)), 1)
-            ]
-            fig = create_trend_chart(years, values)
-            st.plotly_chart(fig, width='stretch')
-        else:
-            st.info("No historical data available for this division.")
-
-# ─── SEARCH ───
-if search_query:
-    st.markdown("---")
-    st.markdown(f"### 🔍 Search Results for '{search_query}'")
-    matches = [s for s in filtered_schools if search_query.lower() in s["name"].lower() or search_query in s["id"]]
-    if matches:
-        for match in matches:
-            sdo = next(s for s in sdo_list if s["id"] == match["sdo_id"])
-            st.write(f"• **{match['name']}** ({match['type']}) – {sdo['name']}")
-    else:
-        st.info("No schools found matching your search.")
-
-# ─── FOOTER ───
-st.markdown("---")
-st.caption("© 2024 DepEd Region X – SBM Digital Twin Dashboard · Built with Streamlit")
+# ------------------------------------------------------------------
+# 6. FOOTER / NOTES
+# ------------------------------------------------------------------
+st.caption("SBM Dashboard v2.0 – Manual control mode. Upload → Run → Reset.")
