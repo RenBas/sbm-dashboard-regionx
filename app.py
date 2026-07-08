@@ -85,21 +85,49 @@ from utils.auth import (
 )
 from utils.download_helpers import generate_report_data, generate_excel_template, generate_template_csv
 from utils.synopsis_generator import generate_synopsis
-from utils.twin_ui import render_sandbox  # ✅ New import
+from utils.twin_ui import render_sandbox
+from utils.data_processor import process_uploaded_data  # ✅ New import
 
 # ════════════════════════════════════════════════════════════════
-# ✅ CACHE DATA LOADING
+# ✅ DATA MANAGEMENT (Single Source of Truth)
 # ════════════════════════════════════════════════════════════════
 
 @st.cache_data
-def load_cached_data():
+def load_cached_mock_data():
+    """Load the default mock data from JSON files."""
     sdo_list = load_sdo_data()
     schools = load_all_schools(sdo_list)
     return sdo_list, schools
 
-sdo_list, schools = load_cached_data()
+def get_active_data():
+    """
+    Get the active dataset (uploaded if available, otherwise mock).
+    Returns (sdo_list, schools).
+    """
+    # Check if uploaded data exists in session state
+    if "uploaded_sdo_list" in st.session_state and "uploaded_schools" in st.session_state:
+        return st.session_state.uploaded_sdo_list, st.session_state.uploaded_schools
+    else:
+        # Fall back to cached mock data
+        return load_cached_mock_data()
 
-# ─── COMPUTE REGIONAL AVERAGE (ALL SCHOOLS IN REGION) ───
+def set_active_data(sdo_list, schools):
+    """Set the active dataset in session state."""
+    st.session_state.uploaded_sdo_list = sdo_list
+    st.session_state.uploaded_schools = schools
+
+def clear_active_data():
+    """Clear uploaded data and revert to mock data."""
+    if "uploaded_sdo_list" in st.session_state:
+        del st.session_state.uploaded_sdo_list
+    if "uploaded_schools" in st.session_state:
+        del st.session_state.uploaded_schools
+    st.rerun()
+
+# ─── LOAD DATA (from session or cache) ───
+sdo_list, schools = get_active_data()
+
+# ─── COMPUTE REGIONAL AVERAGE ───
 all_region_complete = [s for s in schools if s["data_status"] != "Pending"]
 if all_region_complete:
     regional_dim_avgs = compute_dimension_averages(all_region_complete)
@@ -235,6 +263,15 @@ with st.sidebar:
     st.caption(get_accessible_divisions_summary(user))
     st.markdown("---")
     
+    # ── Data Source Indicator ──
+    if "uploaded_sdo_list" in st.session_state:
+        st.info("📌 **Using Uploaded Data**")
+        if st.button("🔄 Reset to Mock Data", use_container_width=True):
+            clear_active_data()
+    else:
+        st.caption("📌 Using Mock Data (for demonstration)")
+    
+    st.markdown("---")
     st.markdown("### 🎨 Appearance")
     col_light, col_dark = st.columns(2)
     with col_light:
@@ -312,7 +349,7 @@ with st.sidebar:
     else:
         st.caption("Select a division to download report.")
     
-    # Download Excel Template (Comprehensive)
+    # Download Excel Template
     template_file = generate_excel_template()
     st.download_button(
         label="📋 Download Data Collection Template (Excel)",
@@ -326,7 +363,7 @@ with st.sidebar:
     # ─── UPLOAD SBM DATA ───
     st.markdown("---")
     st.markdown("### 📤 Upload SBM Data")
-    st.caption("Upload a completed Excel template to update the dashboard.")
+    st.caption("Upload a completed Excel template to replace the current data.")
     
     uploaded_file = st.file_uploader(
         "Choose an Excel file (.xlsx)",
@@ -336,7 +373,7 @@ with st.sidebar:
     
     if uploaded_file is not None:
         try:
-            # Load the uploaded Excel file
+            # Read the uploaded file
             df_schools = pd.read_excel(uploaded_file, sheet_name="School Information")
             df_assessment = pd.read_excel(uploaded_file, sheet_name="SBM Assessment")
             
@@ -344,15 +381,15 @@ with st.sidebar:
             st.caption(f"School Information: {len(df_schools)} schools")
             st.caption(f"SBM Assessment: {len(df_assessment)} indicator scores")
             
-            with st.expander("📄 Preview Uploaded Data"):
-                st.dataframe(df_schools.head(5), width='stretch')
-                st.dataframe(df_assessment.head(10), width='stretch')
-            
-            # Placeholder for data processing
-            st.info("📌 Data processing will be implemented during Phase 2.")
+            # Process the data
+            with st.spinner("Processing uploaded data..."):
+                processed = process_uploaded_data(df_schools, df_assessment)
+                set_active_data(processed["sdo_list"], processed["schools"])
+                st.success("✅ Data processed and loaded. The dashboard is now using the uploaded data.")
+                st.rerun()
             
         except Exception as e:
-            st.error(f"❌ Error reading file: {e}")
+            st.error(f"❌ Error processing file: {e}")
     
     st.markdown("---")
     if st.button("🚪 Logout", use_container_width=True):
@@ -429,7 +466,6 @@ if role == "regional":
     tab1, tab2, tab3 = st.tabs(["📋 Executive Summary", "📊 Division Performance Matrix", "🧪 Digital Twin Sandbox"])
     
     with tab1:
-        # Executive Summary tab: synopsis, map, legend, and bottom tabs
         from streamlit.components.v1 import html as st_html
         wrapped_html = f"""
         <div style="width:100%;padding:0;margin:0;box-sizing:border-box;">
@@ -566,7 +602,7 @@ if role == "regional":
             """, unsafe_allow_html=True)
         st.caption("💡 Click on any SDO shield to zoom in and view its schools. Hover over markers for more details.")
         
-        # ─── BOTTOM TABS (Indicators, Radar Chart, Historical Trend) ───
+        # ─── BOTTOM TABS ───
         st.markdown("---")
         btab1, btab2, btab3 = st.tabs(["📋 Indicators", "📊 Radar Chart", "📈 Historical Trend"])
         with btab1:
@@ -603,7 +639,7 @@ if role == "regional":
                 st.info("No historical data available for this division.")
     
     with tab2:
-        # Division Performance Matrix (unchanged)
+        # Division Performance Matrix
         st.markdown("### 📊 Division Performance Matrix")
         st.caption("Performance of all 14 divisions across the 6 SBM dimensions. Scores are rounded to 1 decimal place.")
         
@@ -676,15 +712,12 @@ if role == "regional":
                 st.rerun()
     
     with tab3:
-        # ─── Digital Twin Sandbox ───
-        from utils.twin_ui import render_sandbox
         render_sandbox(sdo_list, selected_sdo, schools_in_sdo, complete_schools, dim_avgs, overall_avg)
 
 elif role == "division":
     tab1, tab2, tab3 = st.tabs(["📋 Executive Summary", "📊 School Performance Dashboard", "🧪 Digital Twin Sandbox"])
     
     with tab1:
-        # Executive Summary tab: synopsis, map, legend, and bottom tabs
         from streamlit.components.v1 import html as st_html
         wrapped_html = f"""
         <div style="width:100%;padding:0;margin:0;box-sizing:border-box;">
@@ -821,7 +854,7 @@ elif role == "division":
             """, unsafe_allow_html=True)
         st.caption("💡 Click on any SDO shield to zoom in and view its schools. Hover over markers for more details.")
         
-        # ─── BOTTOM TABS (Indicators, Radar Chart, Historical Trend) ───
+        # ─── BOTTOM TABS ───
         st.markdown("---")
         btab1, btab2, btab3 = st.tabs(["📋 Indicators", "📊 Radar Chart", "📈 Historical Trend"])
         with btab1:
@@ -858,7 +891,7 @@ elif role == "division":
                 st.info("No historical data available for this division.")
     
     with tab2:
-        # School Performance Dashboard – no map, no radar, no bottom tabs
+        # School Performance Dashboard
         st.markdown("### 📊 School Performance Dashboard")
         st.caption(f"Detailed school-level performance for {selected_sdo['name']}.")
         
@@ -1057,12 +1090,10 @@ elif role == "division":
                 st.info(f"Navigating to {selected_school_name} (feature coming soon)")
     
     with tab3:
-        # ─── Digital Twin Sandbox ───
-        from utils.twin_ui import render_sandbox
         render_sandbox(sdo_list, selected_sdo, schools_in_sdo, complete_schools, dim_avgs, overall_avg)
 
 else:
-    # School head: no tabs – just synopsis, map, legend, bottom tabs
+    # School head: no tabs
     from streamlit.components.v1 import html as st_html
     wrapped_html = f"""
     <div style="width:100%;padding:0;margin:0;box-sizing:border-box;">
