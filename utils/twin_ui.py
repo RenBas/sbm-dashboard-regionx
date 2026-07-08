@@ -326,3 +326,25 @@ def display_simulation_results(results, time_horizon):
         use_container_width=True,
         key="sandbox_export_button"
     )
+
+# ===== UNIVERSAL FIX =====
+# Paste this at the very bottom of utils/twin_ui.py
+# This creates a safe fallback function that satisfies the import.
+
+def render_sandbox():
+    """
+    Fallback render function for the sandbox.
+    Prevents ImportError: cannot import name 'render_sandbox'.
+    """
+    import streamlit as st
+    st.title("Sandbox (Temporarily Disabled)")
+    st.info("The 'render_sandbox' function is being loaded from the fallback.")
+    
+    # If there is an existing class or function inside this file, 
+    # we can uncomment the appropriate line below tomorrow.
+    # Example: if you have a class named TwinUI:
+    # ui = TwinUI()
+    # ui.render()
+    
+    # Example: if you have a function named render_ui():
+    # render_ui()
