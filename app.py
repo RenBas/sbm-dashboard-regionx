@@ -85,6 +85,7 @@ from utils.auth import (
 )
 from utils.download_helpers import generate_report_data, generate_excel_template, generate_template_csv
 from utils.synopsis_generator import generate_synopsis
+from utils.twin_ui import render_sandbox  # ✅ New import
 
 # ════════════════════════════════════════════════════════════════
 # ✅ CACHE DATA LOADING
@@ -425,7 +426,7 @@ synopsis_html = generate_synopsis(
 
 # ─── TABS BASED ON ROLE ───
 if role == "regional":
-    tab1, tab2 = st.tabs(["📋 Executive Summary", "📊 Division Performance Matrix"])
+    tab1, tab2, tab3 = st.tabs(["📋 Executive Summary", "📊 Division Performance Matrix", "🧪 Digital Twin Sandbox"])
     
     with tab1:
         # Executive Summary tab: synopsis, map, legend, and bottom tabs
@@ -602,9 +603,10 @@ if role == "regional":
                 st.info("No historical data available for this division.")
     
     with tab2:
+        # Division Performance Matrix (unchanged)
         st.markdown("### 📊 Division Performance Matrix")
         st.caption("Performance of all 14 divisions across the 6 SBM dimensions. Scores are rounded to 1 decimal place.")
-        # ... [rest of the matrix code as before, with no map or radar] ...
+        
         matrix_data = []
         for sdo in sdo_list:
             dim_scores = [round(x, 1) for x in sdo["dimension_scores"]]
@@ -672,9 +674,14 @@ if role == "regional":
             if st.button("🚀 Go to Division", use_container_width=True):
                 st.session_state.go_to_division = selected_div_name
                 st.rerun()
+    
+    with tab3:
+        # ─── Digital Twin Sandbox ───
+        from utils.twin_ui import render_sandbox
+        render_sandbox(sdo_list, selected_sdo, schools_in_sdo, complete_schools, dim_avgs, overall_avg)
 
 elif role == "division":
-    tab1, tab2 = st.tabs(["📋 Executive Summary", "📊 School Performance Dashboard"])
+    tab1, tab2, tab3 = st.tabs(["📋 Executive Summary", "📊 School Performance Dashboard", "🧪 Digital Twin Sandbox"])
     
     with tab1:
         # Executive Summary tab: synopsis, map, legend, and bottom tabs
@@ -1048,6 +1055,11 @@ elif role == "division":
         with col_school_btn:
             if st.button("🚀 Go to School", use_container_width=True):
                 st.info(f"Navigating to {selected_school_name} (feature coming soon)")
+    
+    with tab3:
+        # ─── Digital Twin Sandbox ───
+        from utils.twin_ui import render_sandbox
+        render_sandbox(sdo_list, selected_sdo, schools_in_sdo, complete_schools, dim_avgs, overall_avg)
 
 else:
     # School head: no tabs – just synopsis, map, legend, bottom tabs
