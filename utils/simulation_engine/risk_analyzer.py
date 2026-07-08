@@ -8,8 +8,8 @@ from typing import Dict, List, Tuple, Optional
 from dataclasses import dataclass
 from .twin_helpers import compute_dimension_averages_from_scores, get_degree_value
 
-# Import DIMENSION_NAMES from the main constants (correct import)
-from ..constants import DIMENSION_NAMES
+# Use absolute import from utils.constants
+from utils.constants import DIMENSION_NAMES
 
 
 @dataclass
@@ -66,7 +66,7 @@ class RiskAnalyzer:
         
         # 1. Analyze each dimension
         for i, score in enumerate(scores):
-            # Use DIMENSION_NAMES from the imported constant (now available)
+            # Use DIMENSION_NAMES from the imported constant
             dim_name = DIMENSION_NAMES[i] if i < len(DIMENSION_NAMES) else f"Dim {i+1}"
             weight = self.dimension_weights.get(dim_name, 1.0)
             total_weight += weight
