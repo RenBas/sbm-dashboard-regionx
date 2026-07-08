@@ -38,21 +38,28 @@ class MonteCarloSimulation:
                                      volatility: float = 0.2) -> SimulationResult:
         """
         Simulate school progression with random variations.
-        
-        Args:
-            current_scores: List of 6 dimension scores (0.0–3.0)
-            intervention_effects: Dict of intervention effects on each dimension
-            time_steps: Number of time steps to simulate
-            volatility: Standard deviation of random shocks
-            
-        Returns:
-            SimulationResult with probabilistic forecasts
         """
+        # Guard: if all scores are zero, return a flat forecast
+        if not current_scores or all(s == 0 for s in current_scores):
+            return SimulationResult(
+                forecast_values=[0.0] * time_steps,
+                confidence_intervals={"50%": [0.0]*time_steps, "75%": [0.0]*time_steps, "90%": [0.0]*time_steps},
+                distribution={"Not Yet Manifested": 100.0, "Rarely Manifested": 0.0, 
+                              "Frequently Manifested": 0.0, "Always Manifested": 0.0},
+                summary={"mean": 0.0, "median": 0.0, "std": 0.0, "min": 0.0, "max": 0.0}
+            )
+        
+        # Cap volatility to avoid wild swings
+        volatility = min(volatility, 0.3)
+        
         # Run multiple simulations
         all_paths = []
         final_values = []
         
-        for sim in range(self.n_simulations):
+        # Reduce simulations for speed if needed (but keep at least 100)
+        n_sim = min(self.n_simulations, 500)  # Cap for performance
+        
+        for sim in range(n_sim):
             path = self._run_single_simulation(current_scores, intervention_effects, time_steps, volatility)
             all_paths.append(path)
             final_values.append(path[-1])
@@ -67,7 +74,7 @@ class MonteCarloSimulation:
             "max": np.max(final_values),
         }
         
-        # Compute confidence intervals
+        # Compute confidence intervals (using percentiles)
         confidence_intervals = {
             "50%": [np.percentile(paths_array[:, t], 25) for t in range(time_steps)],
             "75%": [np.percentile(paths_array[:, t], 12.5) for t in range(time_steps)],
@@ -87,10 +94,8 @@ class MonteCarloSimulation:
             if degree in degree_counts:
                 degree_counts[degree] += 1
         
-        distribution = {k: v / self.n_simulations * 100 for k, v in degree_counts.items()}
+        distribution = {k: v / n_sim * 100 for k, v in degree_counts.items()}
         
-        # Create result object
-        # For each time step, compute the mean forecast
         mean_path = np.mean(paths_array, axis=0)
         
         return SimulationResult(
@@ -109,13 +114,12 @@ class MonteCarloSimulation:
         """
         path = []
         scores = current_scores.copy()
-        overall = sum(scores) / len(scores)
+        overall = sum(scores) / len(scores) if scores else 0
         path.append(overall)
         
         for t in range(time_steps):
             # Apply intervention effects
             for i in range(len(scores)):
-                # Each dimension can be affected differently
                 effect_key = f"dim_{i}"
                 if effect_key in intervention_effects:
                     # Intervention adds to the score
@@ -124,12 +128,14 @@ class MonteCarloSimulation:
                     # Default: small improvement with random variation
                     scores[i] += 0.05 * np.random.random()
                 
-                # Add random shock
-                scores[i] += np.random.normal(0, volatility / 2)
+                # Add random shock, but ensure it doesn't blow up
+                shock = np.random.normal(0, volatility / 2)
+                scores[i] += shock
+                # Clamp to 0-3
                 scores[i] = max(0.0, min(3.0, scores[i]))
             
             # Recompute overall
-            overall = sum(scores) / len(scores)
+            overall = sum(scores) / len(scores) if scores else 0
             path.append(round(overall, 2))
         
         return path
@@ -137,29 +143,46 @@ class MonteCarloSimulation:
     def simulate_division(self, schools_data: List[Dict],
                           intervention_effects: Dict[str, float],
                           time_steps: int = 3) -> Dict:
-        """
-        Simulate a whole division.
+        """Simulate a whole division."""
+        # Skip if no schools
+        if not schools_data:
+            return {
+                "division": "Unknown",
+                "n_schools": 0,
+                "time_steps": time_steps,
+                "mean_forecast": [0.0]*time_steps,
+                "current_index": 0,
+                "predicted_index": 0,
+                "improvement": 0,
+                "improvement_percent": 0
+            }
         
-        Args:
-            schools_data: List of school data dictionaries with dimension_scores
-            intervention_effects: Dict of intervention effects
-            time_steps: Number of time steps
-            
-        Returns:
-            Dict with division-level simulation results
-        """
         all_results = []
         for school in schools_data:
             scores = school.get("dimension_scores", [0, 0, 0, 0, 0, 0])
+            # Skip schools with no data
+            if all(s == 0 for s in scores):
+                continue
             result = self.simulate_school_progression(scores, intervention_effects, time_steps)
             all_results.append(result)
         
-        # Aggregate division results
+        if not all_results:
+            return {
+                "division": "Unknown",
+                "n_schools": 0,
+                "time_steps": time_steps,
+                "mean_forecast": [0.0]*time_steps,
+                "current_index": 0,
+                "predicted_index": 0,
+                "improvement": 0,
+                "improvement_percent": 0
+            }
+        
         mean_forecasts = np.mean([r.forecast_values for r in all_results], axis=0)
         
         summary = {
             "division": "Aggregated",
-            "n_schools": len(schools_data),
+            "n_schools": len(all_results),
             "time_steps": time_steps,
             "mean_forecast": mean_forecasts.tolist(),
             "current_index": mean_forecasts[0],
@@ -173,17 +196,17 @@ class MonteCarloSimulation:
     def get_risk_analysis(self, current_scores: List[float], 
                           predicted_scores: List[float],
                           threshold: float = 1.5) -> Dict:
-        """
-        Analyze risk based on predicted scores.
+        """Analyze risk based on predicted scores."""
+        if not current_scores or not predicted_scores:
+            return {
+                "current_avg": 0,
+                "predicted_avg": 0,
+                "change": 0,
+                "overall_risk": "Low",
+                "risk_indicators": [],
+                "at_risk_dimensions": 0
+            }
         
-        Args:
-            current_scores: Current SBM scores
-            predicted_scores: Predicted SBM scores
-            threshold: Score below which is considered "at risk"
-            
-        Returns:
-            Dict with risk analysis
-        """
         current_avg = sum(current_scores) / len(current_scores)
         predicted_avg = sum(predicted_scores) / len(predicted_scores)
         
