@@ -1,7 +1,6 @@
 """
-Digital Twin Sandbox UI components – PLACEHOLDER VERSION.
-No dependencies on simulation_engine modules.
-Generates dummy results for UI testing.
+Digital Twin Sandbox UI components – MINIMAL PLACEHOLDER.
+No progress bar, no delays – direct dummy results.
 """
 
 import streamlit as st
@@ -10,14 +9,11 @@ import plotly.graph_objects as go
 import numpy as np
 import random
 from datetime import datetime
-from typing import Dict, List, Optional
-
-# ─── No imports from simulation_engine ───
 
 
 def render_sandbox(sdo_list, selected_sdo, schools_in_sdo, complete_schools, dim_avgs, overall_avg):
     """
-    Main entry point for rendering the Digital Twin Sandbox – PLACEHOLDER.
+    Main entry point for rendering the Digital Twin Sandbox – MINIMAL.
     """
     st.markdown("## 🧪 Digital Twin Sandbox")
     st.caption("Run 'what-if' simulations to predict SBM performance under different intervention scenarios.")
@@ -71,19 +67,16 @@ def render_sandbox(sdo_list, selected_sdo, schools_in_sdo, complete_schools, dim
             ta_visits = st.slider(
                 "Technical Assistance (TA) Visits",
                 min_value=0, max_value=10, value=2,
-                help="Number of TA visits per year",
                 key="sandbox_ta_visits"
             )
             training_days = st.slider(
                 "Capacity Building (Training Days)",
                 min_value=0, max_value=10, value=2,
-                help="Number of training days per year",
                 key="sandbox_training_days"
             )
             budget_increase = st.slider(
                 "Budget Increase (%)",
                 min_value=0, max_value=50, value=10,
-                help="Percentage increase in MOOE allocation",
                 key="sandbox_budget_increase"
             )
             policy_change = st.selectbox(
@@ -95,7 +88,6 @@ def render_sandbox(sdo_list, selected_sdo, schools_in_sdo, complete_schools, dim
             time_horizon = st.slider(
                 "Time Horizon (Years)",
                 min_value=1, max_value=5, value=3,
-                help="Number of years to forecast",
                 key="sandbox_time_horizon"
             )
     
@@ -122,7 +114,7 @@ def render_sandbox(sdo_list, selected_sdo, schools_in_sdo, complete_schools, dim
             disabled=(len(valid_schools) == 0)
         )
     
-    # ─── Simulation Results (Placeholder) ───
+    # ─── Simulation Results ───
     if run_simulation:
         if not valid_schools:
             st.warning("No valid schools with data found. Please check your data.")
@@ -131,76 +123,46 @@ def render_sandbox(sdo_list, selected_sdo, schools_in_sdo, complete_schools, dim
         st.markdown("---")
         st.markdown("### 📈 Simulation Results")
         
-        # ── Show progress (simulated) ──
-        progress_bar = st.progress(0)
-        status_text = st.empty()
-        status_text.text("Running simulation... (this may take a few seconds)")
-        
-        # Simulate some delay
-        import time
-        for i in range(101):
-            progress_bar.progress(i)
-            time.sleep(0.02)
-        
-        progress_bar.progress(100)
-        status_text.text("✅ Simulation complete!")
-        time.sleep(0.5)
-        status_text.empty()
-        progress_bar.empty()
-        
-        # ── Generate dummy results ──
+        # ── Generate dummy results instantly ──
         results = generate_dummy_results(valid_schools, time_horizon, ta_visits, training_days, budget_increase)
         
         # ── Display results ──
         display_simulation_results(results, time_horizon)
-    
-    else:
-        st.info("👆 Adjust the intervention parameters above and click 'Run Simulation' to see predictions.")
 
 
 def generate_dummy_results(schools, time_horizon, ta_visits, training_days, budget_increase):
-    """
-    Generate dummy results for demonstration purposes.
-    """
-    n_schools = len(schools)
+    """Generate dummy results instantly."""
     random.seed(42)
     np.random.seed(42)
     
-    # Base current average
+    n_schools = len(schools)
     current_indices = [s.get("overall_index", 1.5) for s in schools if s.get("overall_index", 0) > 0]
     avg_current = np.mean(current_indices) if current_indices else 1.5
     
-    # Simulate improvement based on interventions
     improvement = 0.0
     improvement += ta_visits * 0.03
     improvement += training_days * 0.02
     improvement += budget_increase * 0.01
     improvement = min(0.8, max(0.0, improvement))
     
-    # Project future values with some randomness
     avg_forecast = [avg_current]
     for t in range(1, time_horizon + 1):
-        # Slowly approach target: avg_current + improvement * (1 - exp(-t/2))
         factor = 1 - np.exp(-t / 2)
         future = avg_current + improvement * factor
-        # Add random noise
         future += random.uniform(-0.05, 0.05)
         future = max(0.0, min(3.0, future))
         avg_forecast.append(round(future, 2))
     
-    # State distribution (random)
     states = ["Not Yet Manifested", "Rarely Manifested", "Frequently Manifested", "Always Manifested"]
     dist = {}
-    total = n_schools
-    if total > 0:
-        dist["Not Yet Manifested"] = round(random.randint(5, 20) / total * 100, 1)
-        dist["Rarely Manifested"] = round(random.randint(10, 30) / total * 100, 1)
-        dist["Frequently Manifested"] = round(random.randint(20, 40) / total * 100, 1)
+    if n_schools > 0:
+        dist["Not Yet Manifested"] = round(random.randint(5, 20) / n_schools * 100, 1)
+        dist["Rarely Manifested"] = round(random.randint(10, 30) / n_schools * 100, 1)
+        dist["Frequently Manifested"] = round(random.randint(20, 40) / n_schools * 100, 1)
         dist["Always Manifested"] = 100 - dist["Not Yet Manifested"] - dist["Rarely Manifested"] - dist["Frequently Manifested"]
     else:
         dist = {"Not Yet Manifested": 0, "Rarely Manifested": 0, "Frequently Manifested": 0, "Always Manifested": 0}
     
-    # Impact analysis
     impact = {
         "ta_impact": round(ta_visits * 0.04, 2),
         "training_impact": round(training_days * 0.03, 2),
@@ -209,7 +171,6 @@ def generate_dummy_results(schools, time_horizon, ta_visits, training_days, budg
         "significance": "Significant" if improvement > 0.2 else "Moderate" if improvement > 0.1 else "Low"
     }
     
-    # Risk summary
     risk_summary = {
         "division": "Division",
         "total_schools": n_schools,
@@ -236,9 +197,7 @@ def generate_dummy_results(schools, time_horizon, ta_visits, training_days, budg
 
 
 def display_simulation_results(results, time_horizon):
-    """
-    Display simulation results using Streamlit components and Plotly charts.
-    """
+    """Display simulation results."""
     # ── Summary metrics ──
     col1, col2, col3, col4 = st.columns(4)
     with col1:
@@ -359,7 +318,6 @@ def display_simulation_results(results, time_horizon):
     for rec in risk.get('recommendations', []):
         st.write(f"- {rec}")
     
-    # ── Export button ──
     st.download_button(
         label="📥 Export Simulation Report (CSV)",
         data=pd.DataFrame([results]).to_csv(index=False),
