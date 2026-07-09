@@ -434,16 +434,68 @@ with st.sidebar:
 
 def process_uploaded_excel(uploaded_file):
     """
-    Read the uploaded Excel and build the sdo_list and schools list
-    exactly as the dashboard expects.
+    Read the uploaded Excel and build sdo_list and schools.
+    Auto‑detects whether the file uses 4 or 6 dimensions and maps accordingly.
     """
-    # Read sheets
     df_schools = pd.read_excel(uploaded_file, sheet_name="School Information")
     df_assessment = pd.read_excel(uploaded_file, sheet_name="SBM Assessment")
 
-    # --------------------------------------------------------------
-    # 1. Build school list
-    # --------------------------------------------------------------
+    # ──────────────────────────────────────────────────────────────
+    # 1. DETECT WHICH DIMENSIONS ARE PRESENT IN THE UPLOADED DATA
+    # ──────────────────────────────────────────────────────────────
+    uploaded_dim_names = df_assessment["Dimension"].unique().tolist()
+    print(f"[DEBUG] Detected dimensions: {uploaded_dim_names}")
+
+    # ──────────────────────────────────────────────────────────────
+    # 2. BUILD THE MAPPING DYNAMICALLY
+    # ──────────────────────────────────────────────────────────────
+    # Dashboard dimension order (6)
+    DASHBOARD_DIMS = [
+        "Curriculum & Teaching",      # index 0
+        "Learning Environment",       # index 1
+        "Leadership",                 # index 2
+        "Governance & Accountability",# index 3
+        "HR & Team Development",      # index 4
+        "Finance & Resource Mgmt."    # index 5
+    ]
+
+    # Mapping from uploaded dimension names to dashboard indices
+    DIM_MAP = {}
+
+    # Scenario A: 4‑dimension format (current mock data)
+    if set(uploaded_dim_names) == {"Leadership and Governance", "Curriculum and Instruction", "Accountability and Continuous Improvement", "Management of Resources"}:
+        DIM_MAP = {
+            "Leadership and Governance": 2,               # -> Leadership
+            "Curriculum and Instruction": 0,              # -> Curriculum & Teaching
+            "Accountability and Continuous Improvement": 3,# -> Governance & Accountability
+            "Management of Resources": 5                  # -> Finance & Resource Mgmt.
+        }
+        print("[DEBUG] Using 4‑dimension mapping (mock data format).")
+
+    # Scenario B: 6‑dimension format (if uploaded names match dashboard names exactly)
+    elif set(uploaded_dim_names) == set(DASHBOARD_DIMS):
+        for dim in uploaded_dim_names:
+            DIM_MAP[dim] = DASHBOARD_DIMS.index(dim)
+        print("[DEBUG] Using 6‑dimension mapping (direct 1:1).")
+
+    # Scenario C: Unknown format – try to map by fuzzy matching or fallback to zeros
+    else:
+        print("[WARNING] Unknown dimension format. Falling back to zero mapping.")
+        # Attempt to match by substring (e.g., "Leadership" matches "Leadership and Governance")
+        for uploaded_dim in uploaded_dim_names:
+            matched = False
+            for i, dashboard_dim in enumerate(DASHBOARD_DIMS):
+                if dashboard_dim.lower() in uploaded_dim.lower() or uploaded_dim.lower() in dashboard_dim.lower():
+                    DIM_MAP[uploaded_dim] = i
+                    matched = True
+                    break
+            if not matched:
+                DIM_MAP[uploaded_dim] = None  # will be ignored
+        print(f"[DEBUG] Fuzzy mapping result: {DIM_MAP}")
+
+    # ──────────────────────────────────────────────────────────────
+    # 3. BUILD SCHOOLS LIST
+    # ──────────────────────────────────────────────────────────────
     schools_dict = {}
     for idx, row in df_schools.iterrows():
         school_id = str(row["School ID"])
@@ -451,8 +503,8 @@ def process_uploaded_excel(uploaded_file):
             "id": school_id,
             "name": row["School Name"],
             "type": row["School Type"],
-            "degree": row["School Type"],          # required for report
-            "sdo_id": row["Division"],            # Division name as ID
+            "degree": row["School Type"],
+            "sdo_id": row["Division"],
             "data_status": row["Data Status"],
             "lat": row["Latitude"],
             "lng": row["Longitude"],
@@ -464,42 +516,36 @@ def process_uploaded_excel(uploaded_file):
             "overall_index": 0.0
         }
 
-    # --------------------------------------------------------------
-    # 2. Compute per‑school dimension scores from assessment data
-    # --------------------------------------------------------------
+    # ──────────────────────────────────────────────────────────────
+    # 4. ASSIGN SCORES USING THE DYNAMIC MAPPING
+    # ──────────────────────────────────────────────────────────────
     dim_avg_df = df_assessment.groupby(["School ID", "Dimension"])["Score"].mean().reset_index()
-    dim_map = {name: i for i, name in enumerate(DIMENSION_NAMES)}
 
     for school_id, group in dim_avg_df.groupby("School ID"):
         if school_id not in schools_dict:
             continue
         scores = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         for _, row in group.iterrows():
-            dim = row["Dimension"]
-            if dim in dim_map:
-                scores[dim_map[dim]] = row["Score"]
+            dim_name = row["Dimension"]
+            if dim_name in DIM_MAP and DIM_MAP[dim_name] is not None:
+                idx = DIM_MAP[dim_name]
+                scores[idx] = row["Score"]
         schools_dict[school_id]["dimension_scores"] = scores
-        schools_dict[school_id]["overall_index"] = sum(scores) / 6 if any(scores) else 0.0
+        schools_dict[school_id]["overall_index"] = sum(scores) / 6
 
     schools = list(schools_dict.values())
 
-    # --------------------------------------------------------------
-    # 3. Build SDO list (one per unique Division)
-    # --------------------------------------------------------------
+    # ──────────────────────────────────────────────────────────────
+    # 5. BUILD SDO LIST
+    # ──────────────────────────────────────────────────────────────
     sdo_names = set(s["sdo_id"] for s in schools)
     sdo_list = []
 
     for sdo_name in sdo_names:
-        # Get all schools in this division
         div_schools = [s for s in schools if s["sdo_id"] == sdo_name]
-        # Lat/lng from first school (or fallback)
-        if div_schools:
-            lat = div_schools[0]["lat"]
-            lng = div_schools[0]["lng"]
-        else:
-            lat, lng = 0.0, 0.0
+        lat = div_schools[0]["lat"] if div_schools else 0.0
+        lng = div_schools[0]["lng"] if div_schools else 0.0
 
-        # Compute dimension averages for this division (using all non‑pending schools)
         complete_div_schools = [s for s in div_schools if s["data_status"] != "Pending"]
         if complete_div_schools:
             dim_scores = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
@@ -510,75 +556,18 @@ def process_uploaded_excel(uploaded_file):
         else:
             dim_scores = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 
-        # Compute lowest dimension score (for map urgency)
         lowest_dim_score = min(dim_scores) if any(dim_scores) else 0.0
 
-        sdo_list.append({
-            "id": sdo_name,
-            "name": sdo_name,
-            "capital": "",                       # not available, set empty
-            "lat": lat,
-            "lng": lng,
-            "dimension_scores": dim_scores,
-            "lowest_dim_score": lowest_dim_score   # <-- NEW: required for map
-        })
-
-    # Debug: print first few schools and SDOs (visible in logs)
-    print(f"[DEBUG] Processed {len(schools)} schools, {len(sdo_list)} divisions.")
-    if schools:
-        print(f"[DEBUG] Sample school: {schools[0]}")
-    if sdo_list:
-        print(f"[DEBUG] Sample SDO: {sdo_list[0]}")
-
-    return sdo_list, schools    
-    # Compute dimension scores per school
-    dim_avg_df = df_assessment.groupby(["School ID", "Dimension"])["Score"].mean().reset_index()
-    dim_map = {name: i for i, name in enumerate(DIMENSION_NAMES)}
-    
-    for school_id, group in dim_avg_df.groupby("School ID"):
-        if school_id not in schools_dict:
-            continue
-        scores = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-        for _, row in group.iterrows():
-            dim = row["Dimension"]
-            if dim in dim_map:
-                scores[dim_map[dim]] = row["Score"]
-        schools_dict[school_id]["dimension_scores"] = scores
-        schools_dict[school_id]["overall_index"] = sum(scores) / 6 if any(scores) else 0.0
-    
-    schools = list(schools_dict.values())
-    
-    # Build SDO list
-    sdo_names = set(s["sdo_id"] for s in schools)
-    sdo_list = []
-    
-    for sdo_name in sdo_names:
-        sample_schools = [s for s in schools if s["sdo_id"] == sdo_name]
-        if sample_schools:
-            lat = sample_schools[0]["lat"]
-            lng = sample_schools[0]["lng"]
-        else:
-            lat, lng = 0.0, 0.0
-        
-        sdo_schools = [s for s in schools if s["sdo_id"] == sdo_name and s["data_status"] != "Pending"]
-        if sdo_schools:
-            dim_scores = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-            for d in range(6):
-                vals = [s["dimension_scores"][d] for s in sdo_schools if s["dimension_scores"][d] > 0]
-                if vals:
-                    dim_scores[d] = sum(vals) / len(vals)
-        else:
-            dim_scores = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-        
         sdo_list.append({
             "id": sdo_name,
             "name": sdo_name,
             "capital": "",
             "lat": lat,
             "lng": lng,
-            "dimension_scores": dim_scores
+            "dimension_scores": dim_scores,
+            "lowest_dim_score": lowest_dim_score
         })
-    
+
     return sdo_list, schools
 
 # Run logic
@@ -884,7 +873,7 @@ elif role == "division":
         # School Performance Dashboard
         st.markdown("### 📊 School Performance Dashboard")
         st.caption(f"Detailed school-level performance for {selected_sdo['name']}.")
-        # (Place your existing division tab2 code here – omitted for brevity, but you can copy from earlier versions)
+        # (You can copy your existing division tab2 code here)
         st.info("School Performance Dashboard – full code to be inserted here.")
     
     with tab3:
