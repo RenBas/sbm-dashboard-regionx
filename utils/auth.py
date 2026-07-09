@@ -36,13 +36,29 @@ MOCK_USERS = {
         "division": None,
         "school_id": None
     },
-    # ── Division (matching the 12 divisions in mock_sbm_data.xlsx) ──
+    # ── Division (matching the 14 divisions in the uploaded data file) ──
+    "sdo_valencia_city": {
+        "username": "sdo_valencia_city",
+        "password": "sdo123",
+        "role": "division",
+        "name": "SDO Valencia City Superintendent",
+        "division": "Valencia City",
+        "school_id": None
+    },
     "sdo_bukidnon": {
         "username": "sdo_bukidnon",
         "password": "sdo123",
         "role": "division",
         "name": "SDO Bukidnon Superintendent",
-        "division": "SDO Bukidnon",
+        "division": "Bukidnon",
+        "school_id": None
+    },
+    "sdo_misamis_occidental": {
+        "username": "sdo_misamis_occidental",
+        "password": "sdo123",
+        "role": "division",
+        "name": "SDO Misamis Occidental Superintendent",
+        "division": "Misamis Occidental",
         "school_id": None
     },
     "sdo_camiguin": {
@@ -50,23 +66,31 @@ MOCK_USERS = {
         "password": "sdo123",
         "role": "division",
         "name": "SDO Camiguin Superintendent",
-        "division": "SDO Camiguin",
+        "division": "Camiguin",
         "school_id": None
     },
-    "sdo_gingoog": {
-        "username": "sdo_gingoog",
+    "sdo_malaybalay_city": {
+        "username": "sdo_malaybalay_city",
         "password": "sdo123",
         "role": "division",
-        "name": "SDO Gingoog Superintendent",
-        "division": "SDO Gingoog",
+        "name": "SDO Malaybalay City Superintendent",
+        "division": "Malaybalay City",
         "school_id": None
     },
-    "sdo_iligan": {
-        "username": "sdo_iligan",
+    "sdo_oroquieta_city": {
+        "username": "sdo_oroquieta_city",
         "password": "sdo123",
         "role": "division",
-        "name": "SDO Iligan City Superintendent",
-        "division": "SDO Iligan",
+        "name": "SDO Oroquieta City Superintendent",
+        "division": "Oroquieta City",
+        "school_id": None
+    },
+    "sdo_gingoog_city": {
+        "username": "sdo_gingoog_city",
+        "password": "sdo123",
+        "role": "division",
+        "name": "SDO Gingoog City Superintendent",
+        "division": "Gingoog City",
         "school_id": None
     },
     "sdo_lanao_del_norte": {
@@ -74,63 +98,55 @@ MOCK_USERS = {
         "password": "sdo123",
         "role": "division",
         "name": "SDO Lanao del Norte Superintendent",
-        "division": "SDO Lanao del Norte",
+        "division": "Lanao del Norte",
         "school_id": None
     },
-    "sdo_malabang": {
-        "username": "sdo_malabang",
+    "sdo_iligan_city": {
+        "username": "sdo_iligan_city",
         "password": "sdo123",
         "role": "division",
-        "name": "SDO Malabang Superintendent",
-        "division": "SDO Malabang",
+        "name": "SDO Iligan City Superintendent",
+        "division": "Iligan City",
         "school_id": None
     },
-    "sdo_misamis_occ": {
-        "username": "sdo_misamis_occ",
-        "password": "sdo123",
-        "role": "division",
-        "name": "SDO Misamis Occidental Superintendent",
-        "division": "SDO Misamis Occidental",
-        "school_id": None
-    },
-    "sdo_misamis_or": {
-        "username": "sdo_misamis_or",
+    "sdo_misamis_oriental": {
+        "username": "sdo_misamis_oriental",
         "password": "sdo123",
         "role": "division",
         "name": "SDO Misamis Oriental Superintendent",
-        "division": "SDO Misamis Oriental",
+        "division": "Misamis Oriental",
         "school_id": None
     },
-    "sdo_oroquieta": {
-        "username": "sdo_oroquieta",
+    "sdo_tangub_city": {
+        "username": "sdo_tangub_city",
         "password": "sdo123",
         "role": "division",
-        "name": "SDO Oroquieta Superintendent",
-        "division": "SDO Oroquieta",
+        "name": "SDO Tangub City Superintendent",
+        "division": "Tangub City",
         "school_id": None
     },
-    "sdo_ozamiz": {
-        "username": "sdo_ozamiz",
+    "sdo_cagayan_de_oro_city": {
+        "username": "sdo_cagayan_de_oro_city",
         "password": "sdo123",
         "role": "division",
-        "name": "SDO Ozamiz Superintendent",
-        "division": "SDO Ozamiz",
+        "name": "SDO Cagayan de Oro City Superintendent",
+        "division": "Cagayan de Oro City",
         "school_id": None
     },
-    "sdo_tangub": {
-        "username": "sdo_tangub",
+    "sdo_el_salvador": {
+        "username": "sdo_el_salvador",
         "password": "sdo123",
         "role": "division",
-        "name": "SDO Tangub Superintendent",
-        "division": "SDO Tangub",
+        "name": "SDO El Salvador Superintendent",
+        "division": "El Salvador",
         "school_id": None
     },
-    "sdo_valencia": {
-        "username": "sdo_valencia",
+    "sdo_ozamiz_city": {
+        "username": "sdo_ozamiz_city",
         "password": "sdo123",
         "role": "division",
-        "name": "SDO Valencia City Superintendent",
-        "division": "SDO Valencia",
+        "name": "SDO Ozamiz City Superintendent",
+        "division": "Ozamis City",
         "school_id": None
     },
     # ── School Heads ──
