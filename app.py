@@ -105,12 +105,20 @@ if "uploaded_schools" not in st.session_state:
     st.session_state.uploaded_schools = None
 
 def reset_app():
-    """Reset to mock data."""
+    """Hard reset: clear all uploaded data, cache, and file uploader widget."""
+    # Clear the file uploader by deleting its key from session state
+    if "sbm_data_upload" in st.session_state:
+        del st.session_state.sbm_data_upload
+
+    st.session_state.uploaded_file = None
     st.session_state.uploaded_sdo_list = None
     st.session_state.uploaded_schools = None
-    st.session_state.uploaded_file = None
     st.session_state.analysis_complete = False
+
+    # Clear all cached data (so mock data is reloaded fresh)
     st.cache_data.clear()
+
+    # Force a full rerun
     st.rerun()
 
 # ────────────────────────────────────────────────────────────────
@@ -440,7 +448,7 @@ def process_uploaded_excel(uploaded_file):
             "id": school_id,
             "name": row["School Name"],
             "type": row["School Type"],
-            "degree": row["School Type"],   # <-- FIX: added degree key
+            "degree": row["School Type"],   # FIX: added degree key
             "sdo_id": row["Division"],      # Division name as SDO id
             "data_status": row["Data Status"],
             "lat": row["Latitude"],
@@ -454,10 +462,7 @@ def process_uploaded_excel(uploaded_file):
         }
     
     # Compute dimension scores per school
-    # Group by School ID and Dimension, then average Score
     dim_avg_df = df_assessment.groupby(["School ID", "Dimension"])["Score"].mean().reset_index()
-    
-    # Map dimension names to indices
     dim_map = {name: i for i, name in enumerate(DIMENSION_NAMES)}
     
     for school_id, group in dim_avg_df.groupby("School ID"):
@@ -468,22 +473,18 @@ def process_uploaded_excel(uploaded_file):
             dim = row["Dimension"]
             if dim in dim_map:
                 scores[dim_map[dim]] = row["Score"]
-        # If all zeros, school is pending – keep zeros
         schools_dict[school_id]["dimension_scores"] = scores
         schools_dict[school_id]["overall_index"] = sum(scores) / 6 if any(scores) else 0.0
     
-    # Convert to list
     schools = list(schools_dict.values())
     
     # --------------------------------------------------------------
     # Build SDO list
     # --------------------------------------------------------------
-    # Get unique SDOs (Division names) from school data
     sdo_names = set(s["sdo_id"] for s in schools)
     sdo_list = []
     
     for sdo_name in sdo_names:
-        # Find a school in this division to get lat/lng
         sample_schools = [s for s in schools if s["sdo_id"] == sdo_name]
         if sample_schools:
             lat = sample_schools[0]["lat"]
@@ -491,7 +492,6 @@ def process_uploaded_excel(uploaded_file):
         else:
             lat, lng = 0.0, 0.0
         
-        # Compute dimension averages for this SDO
         sdo_schools = [s for s in schools if s["sdo_id"] == sdo_name and s["data_status"] != "Pending"]
         if sdo_schools:
             dim_scores = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
@@ -511,7 +511,6 @@ def process_uploaded_excel(uploaded_file):
             "dimension_scores": dim_scores
         })
     
-    # If no schools, return empty
     return sdo_list, schools
 
 # Run logic
@@ -532,13 +531,18 @@ if run_clicked and uploaded_file is None:
     st.warning("Please upload a file first.")
 
 # ────────────────────────────────────────────────────────────────
-# 7. MAIN CONTENT – RENDER INSIDE TABS ONLY (NO DUPLICATION)
+# 7. MAIN CONTENT – Division Header + Tabs
 # ────────────────────────────────────────────────────────────────
 
 if selected_sdo_id is None:
     st.warning("No data available for your role. Please contact your administrator.")
     st.stop()
 
+# ─── DIVISION HEADER (restored) ───
+st.markdown(f"## 🎓 SBM Dashboard: {selected_sdo['name']}")
+st.caption(f"Capital: {selected_sdo['capital']} · {selected_sdo['id']} schools")
+
+# ─── TABS ───
 if role == "regional":
     tab1, tab2, tab3 = st.tabs(["📋 Executive Summary", "📊 Division Performance Matrix", "🧪 Digital Twin Sandbox"])
     
