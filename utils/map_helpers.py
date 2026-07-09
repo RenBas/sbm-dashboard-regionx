@@ -8,15 +8,30 @@ from .constants import DIMENSION_NAMES, SHIELD_COLORS, DEGREE_COLORS
 
 # ─── COLOR HELPERS ───
 
-def get_shield_color(score):
-    if score >= 2.5:
-        return SHIELD_COLORS["high"]
-    elif score >= 2.0:
-        return SHIELD_COLORS["medium_high"]
-    elif score >= 1.0:
-        return SHIELD_COLORS["medium_low"]
+def score_to_color(score):
+    """
+    Return a hex colour based on an SBM index score.
+    Colours match the urgency scale used throughout the dashboard:
+        Red    (< 1.0)   Critical
+        Orange (1.0‑1.9) Warning
+        Yellow (2.0‑2.4) Monitor
+        Green  (≥ 2.5)   Stable
+    """
+    if score < 1.0:
+        return '#dc2626'   # red
+    elif score < 2.0:
+        return '#f97316'   # orange
+    elif score < 2.5:
+        return '#eab308'   # yellow
     else:
-        return SHIELD_COLORS["low"]
+        return '#22c55e'   # green
+
+def get_shield_color(score):
+    """
+    Shield colour now uses the same urgency scale as school dots.
+    (This replaces the previous SHIELD_COLORS lookup.)
+    """
+    return score_to_color(score)
 
 def get_school_dot_color(degree):
     return DEGREE_COLORS.get(degree, "#9ca3af")
@@ -30,17 +45,6 @@ def get_school_dot_size(enrollment):
         return 12
     else:
         return 16
-
-def score_to_color(score):
-    """Return a hex colour based on SBM index (same urgency scale as shields)."""
-    if score < 1.0:
-        return '#dc2626'   # red – critical
-    elif score < 2.0:
-        return '#f97316'   # orange – warning
-    elif score < 2.5:
-        return '#eab308'   # yellow – monitor
-    else:
-        return '#22c55e'   # green – stable
 
 # ─── SHIELD SVG GENERATOR ───
 
@@ -83,15 +87,17 @@ def create_glow_html(urgency):
     """
     Create an animated glow effect using HTML/CSS with radial gradient.
     Returns HTML string for DivIcon.
+    
+    NOTE: If no glow appears, ensure that the 'urgency_factor' key
+    is properly calculated and stored in each SDO dictionary.
     """
     if urgency <= 0.1:
         return None
     
-    # Glow parameters based on urgency
     if urgency > 0.7:
         glow_color = "#dc2626"  # Red
         glow_opacity = 0.55
-        pulse_duration = 1.2  # Fast pulse
+        pulse_duration = 1.2
     elif urgency > 0.4:
         glow_color = "#f97316"  # Orange
         glow_opacity = 0.45
@@ -101,10 +107,8 @@ def create_glow_html(urgency):
         glow_opacity = 0.35
         pulse_duration = 2.4
     
-    # Size based on urgency (larger = more urgent)
-    size = 50 + urgency * 50  # 50px to 100px
+    size = 50 + urgency * 50
     
-    # CSS keyframes for pulsing animation
     css = '''
     <style>
         @keyframes pulseGlow {
@@ -134,14 +138,16 @@ def create_glow_html(urgency):
 def add_sdo_shield(map_obj, sdo):
     """
     Add an SDO marker with:
-    - Shield: CustomIcon (SVG)
-    - Glow: DivIcon (HTML/CSS) - ANIMATED
+    - Animated glow (DivIcon) – requires 'urgency_factor' in SDO dict.
+    - Shield (CustomIcon) – colour based on lowest dimension score.
+    Tooltip shows overall SBM index, lowest dimension, and urgency factor.
     """
-    color = get_shield_color(sdo["lowest_dim_score"])
+    score = sdo["lowest_dim_score"]
+    color = get_shield_color(score)
     label = sdo["name"].replace("SDO ", "").split(" ")[0][:3]
     urgency = sdo.get("urgency_factor", 0)
     
-    # ── ANIMATED GLOW (DivIcon) ──
+    # Glow
     glow_html = create_glow_html(urgency)
     if glow_html:
         glow_icon = folium.DivIcon(
@@ -150,15 +156,13 @@ def add_sdo_shield(map_obj, sdo):
             icon_anchor=(50, 50),
             popup_anchor=(0, -50)
         )
-        
         folium.Marker(
             location=[sdo["lat"], sdo["lng"]],
             icon=glow_icon,
-            tooltip="Glow",
             opacity=1
         ).add_to(map_obj)
     
-    # ── SHIELD (CustomIcon) ──
+    # Shield
     icon_url = create_shield_svg(color, size=32, label=label)
     icon = folium.CustomIcon(
         icon_url,
@@ -167,20 +171,28 @@ def add_sdo_shield(map_obj, sdo):
         popup_anchor=(0, -16)
     )
     
+    # Tooltip with SBM index, lowest dimension, urgency
+    tooltip = (
+        f"{sdo['name']} | SBM Index: {sdo['overall_index']:.1f} | "
+        f"Lowest: {sdo['lowest_dim_name']} ({sdo['lowest_dim_score']:.1f}) | "
+        f"Urgency: {urgency:.2f}"
+    )
+    
     folium.Marker(
         location=[sdo["lat"], sdo["lng"]],
         popup=folium.Popup(get_sdo_popup_html(sdo), max_width=250),
         icon=icon,
-        tooltip=sdo["name"]
+        tooltip=tooltip
     ).add_to(map_obj)
 
 
 def add_school_dot(map_obj, school):
     """
-    Add a colour‑coded school marker to the folium map.
-    - Colour is based on the school's overall SBM index (red/orange/yellow/green).
-    - Size is based on enrollment.
-    - Pending schools are shown in grey with a dashed border.
+    Add a colour‑coded school dot.
+    - Colour: based on overall SBM index (red/orange/yellow/green).
+    - Size: based on enrollment.
+    - Tooltip: overall index, lowest dimension.
+    - Pending schools are grey with dashed border.
     """
     is_pending = school["data_status"] == "Pending"
     
@@ -190,14 +202,20 @@ def add_school_dot(map_obj, school):
         weight = 3
         dash_array = "5,5"
         fill_opacity = 0.4
+        tooltip = f"{school['name']}  (Data Pending)"
     else:
-        # Use the overall SBM index to determine colour
         score = school.get("overall_index", 0)
         fill_color = score_to_color(score)
         border_color = "rgba(255,255,255,0.9)"
         weight = 2
         dash_array = None
         fill_opacity = 0.9
+        # Tooltip with overall index and lowest dimension
+        low_dim = DIMENSION_NAMES[school["lowest_dim_index"]]
+        tooltip = (
+            f"{school['name']} | SBM Index: {school['overall_index']:.1f} | "
+            f"Lowest: {low_dim} ({school['lowest_dim_score']:.1f})"
+        )
     
     size = get_school_dot_size(school["enrollment"])
     
@@ -211,7 +229,7 @@ def add_school_dot(map_obj, school):
         fill_opacity=fill_opacity,
         dash_array=dash_array,
         popup=folium.Popup(get_school_popup_html(school), max_width=250),
-        tooltip=school["name"]
+        tooltip=tooltip
     ).add_to(map_obj)
 
 
