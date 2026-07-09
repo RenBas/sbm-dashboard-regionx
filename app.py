@@ -378,7 +378,7 @@ with st.sidebar:
     if reset_clicked:
         reset_app()
     
-    with st.expander("🔍 Debug Data Info", expanded=False):
+    with st.expander("🔍 Debug Data Info", expanded=True):  # expanded by default
         st.write(f"**Data Source:** {'Uploaded' if st.session_state.uploaded_sdo_list is not None else 'Empty'}")
         st.write(f"**Total SDOs:** {len(sdo_list)}")
         st.write(f"**Total Schools:** {len(schools)}")
@@ -428,7 +428,7 @@ with st.sidebar:
     st.caption("DepEd Region X – Northern Mindanao")
 
 # ────────────────────────────────────────────────────────────────
-# 6. PROCESS UPLOAD – WITH UI DEBUG
+# 6. PROCESS UPLOAD – WITH PERSISTENT DEBUG
 # ────────────────────────────────────────────────────────────────
 
 def process_uploaded_excel(uploaded_file):
@@ -438,14 +438,6 @@ def process_uploaded_excel(uploaded_file):
     """
     # Read the first sheet
     df = pd.read_excel(uploaded_file, sheet_name=0)
-    
-    # ─── DEBUG: Show raw data on the page ───
-    st.subheader("🔍 Raw Data Inspection")
-    st.write("**First 5 rows of the uploaded file:**")
-    st.dataframe(df.head(5))
-    st.write("**Column names (first 20):**")
-    st.write(df.columns.tolist()[:20])
-    
     debug = {}
     debug["columns_detected"] = df.columns.tolist()
     debug["num_rows"] = len(df)
@@ -556,9 +548,6 @@ def process_uploaded_excel(uploaded_file):
     debug["num_sdo"] = len(sdo_list)
     debug["num_schools"] = len(schools)
 
-    # Show SDO names found
-    st.write("**Division names found in data:**", debug["sdo_names_found"])
-
     return sdo_list, schools, debug
 
 # Run logic
@@ -566,6 +555,7 @@ if run_clicked and uploaded_file is not None:
     with st.spinner("⏳ Processing uploaded data..."):
         try:
             new_sdo_list, new_schools, debug_info = process_uploaded_excel(uploaded_file)
+            # Store in session state
             st.session_state.uploaded_sdo_list = new_sdo_list
             st.session_state.uploaded_schools = new_schools
             st.session_state.debug_info = debug_info
@@ -584,7 +574,12 @@ if run_clicked and uploaded_file is None:
 # ────────────────────────────────────────────────────────────────
 
 if not sdo_list or not schools:
-    st.info("📭 No data loaded. Please upload SBM data using the sidebar and click **Run Analysis**.")
+    # Show debug info on the page to help diagnose
+    st.error("📭 No data loaded. The file was processed but no schools or divisions were created.")
+    if st.session_state.debug_info:
+        st.write("**Debug Information from last processing:**")
+        st.json(st.session_state.debug_info)
+    st.info("💡 Please check that the uploaded file has data rows and that the 'Division' column is populated.")
     st.stop()
 
 if selected_sdo_id is None:
