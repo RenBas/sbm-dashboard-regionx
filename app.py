@@ -93,7 +93,7 @@ except FileNotFoundError:
     pass
 
 # ────────────────────────────────────────────────────────────────
-# 1. SESSION STATE INITIALISATION (Empty by default)
+# 1. SESSION STATE INITIALISATION
 # ────────────────────────────────────────────────────────────────
 if "analysis_complete" not in st.session_state:
     st.session_state.analysis_complete = False
@@ -104,34 +104,33 @@ if "uploaded_sdo_list" not in st.session_state:
 if "uploaded_schools" not in st.session_state:
     st.session_state.uploaded_schools = None
 
+# Store debug info in session state so we can display it after processing
+if "debug_info" not in st.session_state:
+    st.session_state.debug_info = {}
+
 def reset_app():
-    """Hard reset: clear all data and revert to empty state (no mock data)."""
-    # Clear the file uploader widget
+    """Hard reset: clear all data and revert to empty state."""
     if "sbm_data_upload" in st.session_state:
         del st.session_state.sbm_data_upload
-    # Clear uploaded data
     st.session_state.uploaded_file = None
     st.session_state.uploaded_sdo_list = None
     st.session_state.uploaded_schools = None
     st.session_state.analysis_complete = False
-    # Clear cached data (if any)
+    st.session_state.debug_info = {}
     st.cache_data.clear()
     st.rerun()
 
 # ────────────────────────────────────────────────────────────────
-# 2. DATA LOADING – No default mock data; only uploaded data
+# 2. DATA LOADING
 # ────────────────────────────────────────────────────────────────
 def get_active_data():
-    """Returns (sdo_list, schools). If no uploaded data exists, returns empty lists."""
     if st.session_state.uploaded_sdo_list is not None and st.session_state.uploaded_schools is not None:
         return st.session_state.uploaded_sdo_list, st.session_state.uploaded_schools
     else:
-        return [], []  # Clean slate
+        return [], []
 
-# Load data (will be empty until upload)
 sdo_list, schools = get_active_data()
 
-# Compute regional averages (if any data exists)
 all_region_complete = [s for s in schools if s.get("data_status") != "Pending"]
 if all_region_complete:
     regional_dim_avgs = compute_dimension_averages(all_region_complete)
@@ -192,15 +191,12 @@ if user is None:
 role = user.get("role", "school")
 user_name = user.get("name", "User")
 
-# ────────────────────────────────────────────────────────────────
-# 4. ACCESSIBLE DATA (depends on sdo_list and schools)
-# ────────────────────────────────────────────────────────────────
 filtered_data = get_accessible_schools(user, sdo_list, schools)
 filtered_sdos = filtered_data.get("filtered_sdos", [])
 filtered_schools = filtered_data.get("filtered_schools", [])
 
 # ────────────────────────────────────────────────────────────────
-# 5. SELECTED SDO (or none if no data)
+# 4. SELECTED SDO
 # ────────────────────────────────────────────────────────────────
 selected_sdo = None
 selected_sdo_id = None
@@ -235,7 +231,6 @@ if selected_sdo is None and sdo_list:
             selected_sdo = sdo_list[0] if sdo_list else None
             selected_sdo_id = selected_sdo["id"] if selected_sdo else None
 
-# ─── COMPUTE SCHOOL DATA FOR THE CURRENT SDO ───
 if selected_sdo_id is not None:
     schools_in_sdo = get_schools_by_sdo(filtered_schools, selected_sdo_id) if filtered_schools else []
 else:
@@ -254,14 +249,13 @@ else:
     min_dim_idx = 0
 
 # ────────────────────────────────────────────────────────────────
-# 6. SIDEBAR (with unique button keys)
+# 5. SIDEBAR
 # ────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown(f"### 👤 {user_name}")
     st.caption(get_accessible_divisions_summary(user))
     st.markdown("---")
     
-    # Data Source Indicator
     if st.session_state.uploaded_sdo_list is not None:
         st.info("📌 **Using Uploaded Data**")
         if st.button("🔄 Reset to Empty Slate", use_container_width=True, key="reset_to_empty_slate"):
@@ -296,7 +290,6 @@ with st.sidebar:
                 st.caption(f"📋 {selected_sdo['name']}")
             else:
                 selected_sdo_name = st.selectbox("Select Division", options=sdo_names, index=0, key="sidebar_division_select")
-                # Update selected SDO and recompute data
                 selected_sdo = next((s for s in sdo_list if s["name"] == selected_sdo_name), selected_sdo)
                 selected_sdo_id = selected_sdo["id"] if selected_sdo else None
                 schools_in_sdo = get_schools_by_sdo(filtered_schools, selected_sdo_id) if selected_sdo_id else []
@@ -344,7 +337,6 @@ with st.sidebar:
     else:
         st.caption("No data loaded.")
     
-    # Download Excel Template
     template_file = generate_excel_template()
     st.download_button(
         label="📋 Download Data Collection Template (Excel)",
@@ -381,7 +373,6 @@ with st.sidebar:
     if reset_clicked:
         reset_app()
     
-    # ─── DEBUG INFO ───
     with st.expander("🔍 Debug Data Info", expanded=False):
         st.write(f"**Data Source:** {'Uploaded' if st.session_state.uploaded_sdo_list is not None else 'Empty'}")
         st.write(f"**Total SDOs:** {len(sdo_list)}")
@@ -394,6 +385,10 @@ with st.sidebar:
         if sdo_list:
             sample_sdo = sdo_list[0]
             st.write(f"**Sample SDO Scores:** {sample_sdo.get('dimension_scores', [])}")
+        # Show debug info stored after processing
+        if st.session_state.debug_info:
+            st.write("**Debug Info from last processing:**")
+            st.json(st.session_state.debug_info)
     
     st.markdown("---")
     if st.button("🚪 Logout", use_container_width=True, key="logout_button"):
@@ -429,30 +424,29 @@ with st.sidebar:
     st.caption("DepEd Region X – Northern Mindanao")
 
 # ────────────────────────────────────────────────────────────────
-# 7. PROCESS UPLOAD (Run button logic)
+# 6. PROCESS UPLOAD (with UI debugging)
 # ────────────────────────────────────────────────────────────────
 
 def process_uploaded_excel(uploaded_file):
     """
     Read the uploaded Excel and build sdo_list and schools.
-    Uses robust substring matching for dimension mapping.
+    Returns data and a debug dictionary.
     """
     df_schools = pd.read_excel(uploaded_file, sheet_name="School Information")
     df_assessment = pd.read_excel(uploaded_file, sheet_name="SBM Assessment")
+    debug = {}
 
     # Force Score to numeric
     df_assessment["Score"] = pd.to_numeric(df_assessment["Score"], errors="coerce")
+    debug["score_dtype"] = str(df_assessment["Score"].dtype)
+    debug["num_schools"] = len(df_schools)
+    debug["num_assessment_rows"] = len(df_assessment)
 
-    # ──────────────────────────────────────────────────────────────
-    # 1. DETECT DIMENSION NAMES (clean)
-    # ──────────────────────────────────────────────────────────────
+    # Detect unique dimensions
     uploaded_dim_names = [d.strip() for d in df_assessment["Dimension"].unique().tolist()]
-    print("[DEBUG] Raw dimension names from file:", uploaded_dim_names)
+    debug["detected_dimensions"] = uploaded_dim_names
 
-    # ──────────────────────────────────────────────────────────────
-    # 2. BUILD MAPPING USING SUBSTRING MATCHING
-    # ──────────────────────────────────────────────────────────────
-    # Dashboard indices: 0=Curriculum, 1=Learning, 2=Leadership, 3=Governance, 4=HR, 5=Finance
+    # Build mapping using substring matching
     DIM_MAP = {}
     for dim in uploaded_dim_names:
         dim_lower = dim.lower()
@@ -469,31 +463,10 @@ def process_uploaded_excel(uploaded_file):
         elif "hr" in dim_lower or "human" in dim_lower:
             DIM_MAP[dim] = 4
         else:
-            # Try to match by first word (e.g., "Curriculum" -> index 0)
-            first_word = dim_lower.split()[0] if dim_lower.split() else ""
-            if first_word in ["curriculum", "leadership", "accountability", "management", "learning", "hr"]:
-                # Use a basic guess
-                if first_word == "curriculum":
-                    DIM_MAP[dim] = 0
-                elif first_word == "leadership":
-                    DIM_MAP[dim] = 2
-                elif first_word == "accountability":
-                    DIM_MAP[dim] = 3
-                elif first_word == "management":
-                    DIM_MAP[dim] = 5
-                elif first_word == "learning":
-                    DIM_MAP[dim] = 1
-                elif first_word == "hr":
-                    DIM_MAP[dim] = 4
-            else:
-                DIM_MAP[dim] = None  # will ignore
-                print(f"[WARNING] No mapping for dimension: '{dim}'")
+            DIM_MAP[dim] = None
+    debug["mapping"] = DIM_MAP
 
-    print("[DEBUG] Final mapping:", DIM_MAP)
-
-    # ──────────────────────────────────────────────────────────────
-    # 3. BUILD SCHOOLS LIST
-    # ──────────────────────────────────────────────────────────────
+    # Build schools
     schools_dict = {}
     for idx, row in df_schools.iterrows():
         school_id = str(row["School ID"])
@@ -514,11 +487,8 @@ def process_uploaded_excel(uploaded_file):
             "overall_index": 0.0
         }
 
-    # ──────────────────────────────────────────────────────────────
-    # 4. ASSIGN SCORES
-    # ──────────────────────────────────────────────────────────────
+    # Assign scores
     dim_avg_df = df_assessment.groupby(["School ID", "Dimension"])["Score"].mean().reset_index()
-
     for school_id, group in dim_avg_df.groupby("School ID"):
         if school_id not in schools_dict:
             continue
@@ -532,18 +502,15 @@ def process_uploaded_excel(uploaded_file):
         schools_dict[school_id]["overall_index"] = sum(scores) / 6
 
     schools = list(schools_dict.values())
+    debug["sample_school_scores"] = schools[0]["dimension_scores"] if schools else None
 
-    # ──────────────────────────────────────────────────────────────
-    # 5. BUILD SDO LIST
-    # ──────────────────────────────────────────────────────────────
+    # Build SDO list
     sdo_names = set(s["sdo_id"] for s in schools)
     sdo_list = []
-
     for sdo_name in sdo_names:
         div_schools = [s for s in schools if s["sdo_id"] == sdo_name]
         lat = div_schools[0]["lat"] if div_schools else 0.0
         lng = div_schools[0]["lng"] if div_schools else 0.0
-
         complete_div_schools = [s for s in div_schools if s["data_status"] != "Pending"]
         if complete_div_schools:
             dim_scores = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
@@ -553,9 +520,7 @@ def process_uploaded_excel(uploaded_file):
                     dim_scores[d] = sum(vals) / len(vals)
         else:
             dim_scores = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-
         lowest_dim_score = min(dim_scores) if any(dim_scores) else 0.0
-
         sdo_list.append({
             "id": sdo_name,
             "name": sdo_name,
@@ -565,22 +530,18 @@ def process_uploaded_excel(uploaded_file):
             "dimension_scores": dim_scores,
             "lowest_dim_score": lowest_dim_score
         })
+    debug["sample_sdo_scores"] = sdo_list[0]["dimension_scores"] if sdo_list else None
 
-    # Print sample scores for verification
-    if schools:
-        print("[DEBUG] Sample school scores:", schools[0]["dimension_scores"])
-    if sdo_list:
-        print("[DEBUG] Sample SDO scores:", sdo_list[0]["dimension_scores"])
-
-    return sdo_list, schools
+    return sdo_list, schools, debug
 
 # Run logic
 if run_clicked and uploaded_file is not None:
     with st.spinner("⏳ Processing uploaded data..."):
         try:
-            new_sdo_list, new_schools = process_uploaded_excel(uploaded_file)
+            new_sdo_list, new_schools, debug_info = process_uploaded_excel(uploaded_file)
             st.session_state.uploaded_sdo_list = new_sdo_list
             st.session_state.uploaded_schools = new_schools
+            st.session_state.debug_info = debug_info
             st.session_state.analysis_complete = True
             st.success("✅ Data loaded successfully! Refreshing...")
             st.rerun()
@@ -592,7 +553,7 @@ if run_clicked and uploaded_file is None:
     st.warning("Please upload a file first.")
 
 # ────────────────────────────────────────────────────────────────
-# 8. MAIN CONTENT – Only if data is loaded
+# 7. MAIN CONTENT – Only if data is loaded
 # ────────────────────────────────────────────────────────────────
 
 if not sdo_list or not schools:
@@ -612,7 +573,6 @@ if role == "regional":
     tab1, tab2, tab3 = st.tabs(["📋 Executive Summary", "📊 Division Performance Matrix", "🧪 Digital Twin Sandbox"])
     
     with tab1:
-        # KPI cards
         col1, col2, col3, col4 = st.columns(4)
         with col1:
             st.metric("🏫 Total Schools", len(schools_in_sdo), 
@@ -625,7 +585,6 @@ if role == "regional":
         with col4:
             st.metric("⬇️ Lowest Dimension (Urgent)", DIMENSION_NAMES[min_dim_idx] if overall_avg > 0 else "—", delta_color="inverse")
         
-        # Synopsis
         synopsis_html = generate_synopsis(
             user_role=role,
             user_name=user_name,
@@ -644,7 +603,6 @@ if role == "regional":
         """
         st_html(wrapped_html, height=900, scrolling=True)
         
-        # Map
         st.markdown("---")
         try:
             map_center = [selected_sdo["lat"], selected_sdo["lng"]]
@@ -657,7 +615,6 @@ if role == "regional":
         except Exception as e:
             st.error(f"Map rendering failed: {e}")
         
-        # Map legend
         st.markdown("---")
         st.markdown("""
         <div class="custom-footnote" style="padding:14px 18px;border-radius:8px;margin-bottom:14px;">
@@ -680,7 +637,6 @@ if role == "regional":
         """, unsafe_allow_html=True)
         st.caption("💡 Click on any SDO shield to zoom in and view its schools. Hover over markers for more details.")
         
-        # Bottom tabs
         st.markdown("---")
         btab1, btab2, btab3 = st.tabs(["📋 Indicators", "📊 Radar Chart", "📈 Historical Trend"])
         with btab1:
@@ -714,7 +670,6 @@ if role == "regional":
                 st.info("No historical data available for this division.")
     
     with tab2:
-        # Division Performance Matrix
         st.markdown("### 📊 Division Performance Matrix")
         st.caption("Performance of all divisions across the 6 SBM dimensions. Scores are rounded to 1 decimal place.")
         matrix_data = []
@@ -785,7 +740,6 @@ elif role == "division":
     tab1, tab2, tab3 = st.tabs(["📋 Executive Summary", "📊 School Performance Dashboard", "🧪 Digital Twin Sandbox"])
     
     with tab1:
-        # KPI cards
         col1, col2, col3, col4 = st.columns(4)
         with col1:
             st.metric("🏫 Total Schools", len(schools_in_sdo), 
@@ -874,17 +828,14 @@ elif role == "division":
                 st.info("No historical data available for this division.")
     
     with tab2:
-        # School Performance Dashboard
         st.markdown("### 📊 School Performance Dashboard")
         st.caption(f"Detailed school-level performance for {selected_sdo['name']}.")
-        # (You can copy your existing division tab2 code here)
         st.info("School Performance Dashboard – full code to be inserted here.")
     
     with tab3:
         render_sandbox(sdo_list, selected_sdo, schools_in_sdo, complete_schools, dim_avgs, overall_avg)
 
 else:
-    # School Head View
     st.info("School head view – detailed dashboard coming soon.")
 
 # ─── SEARCH RESULTS ───
@@ -900,6 +851,5 @@ if search_query and schools:
     else:
         st.info("No schools found matching your search.")
 
-# ─── FOOTER ───
 st.markdown("---")
 st.caption("© 2024 DepEd Region X – SBM Digital Twin Dashboard · Built with Streamlit")
