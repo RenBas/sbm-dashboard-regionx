@@ -7,25 +7,25 @@ from typing import Dict, List, Optional, Tuple
 # Constants
 # ----------------------------------------------------------------------
 DIMENSION_NAMES = [
-    "Core Teaching",
+    "Leadership and Governance",
+    "Curriculum and Instruction",
     "Learning Environment",
-    "Leadership & Governance",
-    "Accountability",
-    "Human Resources",
-    "Financial Resources"
+    "Accountability and Continuous Improvement",
+    "Management of Resources",
+    "Finance & Resource Management"
 ]
 
-# Generate all 42 indicator IDs from CT_1 to FR_42
+# Generate all 30 indicator IDs from LG_Indicator1 to FR_Indicator5
 INDICATOR_IDS = []
-for dim_prefix in ["CT", "LE", "LG", "AC", "HR", "FR"]:
-    for i in range(1, 9):
-        INDICATOR_IDS.append(f"{dim_prefix}_{i}")
+for dim_prefix in ["LG", "CI", "LE", "AC", "MR", "FR"]:
+    for i in range(1, 6):
+        INDICATOR_IDS.append(f"{dim_prefix}_Indicator{i}")
 
 # Map indicator to dimension
 INDICATOR_TO_DIM = {}
-for dim_name, prefix in zip(DIMENSION_NAMES, ["CT", "LE", "LG", "AC", "HR", "FR"]):
-    for i in range(1, 9):
-        INDICATOR_TO_DIM[f"{prefix}_{i}"] = dim_name
+for dim_name, prefix in zip(DIMENSION_NAMES, ["LG", "CI", "LE", "AC", "MR", "FR"]):
+    for i in range(1, 6):
+        INDICATOR_TO_DIM[f"{prefix}_Indicator{i}"] = dim_name
 
 
 # ----------------------------------------------------------------------
@@ -42,10 +42,23 @@ def process_uploaded_data(df: pd.DataFrame) -> Dict:
     # Identify existing indicator columns
     existing_indicators = [col for col in INDICATOR_IDS if col in data.columns]
     if not existing_indicators:
-        raise ValueError("No indicator columns (CT_1 ... FR_42) found.")
+        raise ValueError("No indicator columns (LG_Indicator1 ... FR_Indicator5) found.")
 
-    # Prepare school info
-    school_info = data[["School ID", "School Name", "Division", "Latitude", "Longitude", "Offering"]].copy()
+    # Prepare school info - handle column name variations
+    required_cols = ["School ID", "School Name", "Division", "Latitude", "Longitude"]
+    for col in required_cols:
+        if col not in data.columns:
+            raise ValueError(f"Missing required column: {col}")
+    
+    school_info = data[required_cols].copy()
+    # Handle 'School Type' or 'Offering' column
+    if "School Type" in data.columns:
+        school_info["Offering"] = data["School Type"]
+    elif "Offering" in data.columns:
+        school_info["Offering"] = data["Offering"]
+    else:
+        school_info["Offering"] = "Elementary"
+        
     if "Enrollment" in data.columns:
         school_info["Enrollment"] = pd.to_numeric(data["Enrollment"], errors='coerce').fillna(0).astype(int)
     else:
@@ -88,10 +101,15 @@ def process_uploaded_data(df: pd.DataFrame) -> Dict:
         })
     div_to_id = {sdo["name"]: sdo["id"] for sdo in sdo_list}
 
-    # Process each school
+    # Process each school - optimized with groupby instead of loop
     schools_list = []
+    assessment_df["School ID"] = assessment_df["School ID"].astype(str)
+    
+    # Group assessments by school for faster lookup
+    grouped_assessments = {group_id: group for group_id, group in assessment_df.groupby("School ID")}
+    
     for _, school_row in school_info.iterrows():
-        school_id = school_row["School ID"]
+        school_id = str(school_row["School ID"])
         school_name = school_row["School Name"]
         division = school_row["Division"]
         sdo_id = div_to_id.get(division)
@@ -100,9 +118,9 @@ def process_uploaded_data(df: pd.DataFrame) -> Dict:
         enrollment = school_row["Enrollment"]
         school_type = school_row.get("Offering", "Elementary")
 
-        school_scores = assessment_df[assessment_df["School ID"] == school_id]
+        school_scores = grouped_assessments.get(school_id)
 
-        if school_scores.empty:
+        if school_scores is None or school_scores.empty:
             dim_scores = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
             overall_index = 0.0
             degree = "Pending"
@@ -177,9 +195,9 @@ def process_uploaded_data(df: pd.DataFrame) -> Dict:
         sdo["urgency_factor"] = round(1 - raw, 3)
 
     # ------------------------------------------------------------------
-    # Monte Carlo Simulation (500 iterations)
+    # Monte Carlo Simulation (100 iterations - reduced for performance)
     # ------------------------------------------------------------------
-    monte_carlo_results = run_monte_carlo(schools_list, n_iter=500)
+    monte_carlo_results = run_monte_carlo(schools_list, n_iter=100)
 
     return {
         "sdo_list": sdo_list,
