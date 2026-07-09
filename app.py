@@ -195,12 +195,11 @@ filtered_sdos = filtered_data.get("filtered_sdos", [])
 filtered_schools = filtered_data.get("filtered_schools", [])
 
 # ────────────────────────────────────────────────────────────────
-# 4. SELECTED SDO (fixed for uploaded data)
+# 4. SELECTED SDO
 # ────────────────────────────────────────────────────────────────
 selected_sdo = None
 selected_sdo_id = None
 
-# If user came from "Jump to Division" button
 if "go_to_division" in st.session_state:
     target_div_name = st.session_state.go_to_division
     for sdo in sdo_list:
@@ -210,7 +209,6 @@ if "go_to_division" in st.session_state:
             break
     del st.session_state.go_to_division
 
-# If no division selected yet, pick the first SDO from the uploaded data
 if selected_sdo is None and sdo_list:
     if is_school_head(user):
         if filtered_schools:
@@ -232,12 +230,9 @@ if selected_sdo is None and sdo_list:
             selected_sdo = sdo_list[0] if sdo_list else None
             selected_sdo_id = selected_sdo["id"] if selected_sdo else None
 
-# Ensure the selected SDO has valid fields
 if selected_sdo is not None:
-    # Set a default capital if missing
     if "capital" not in selected_sdo or pd.isna(selected_sdo.get("capital")):
         selected_sdo["capital"] = ""
-    # Ensure name is a string
     if "name" in selected_sdo:
         selected_sdo["name"] = str(selected_sdo["name"])
 
@@ -433,7 +428,7 @@ with st.sidebar:
     st.caption("DepEd Region X – Northern Mindanao")
 
 # ────────────────────────────────────────────────────────────────
-# 6. PROCESS UPLOAD – SINGLE-SHEET TEMPLATE
+# 6. PROCESS UPLOAD – WITH UI DEBUG
 # ────────────────────────────────────────────────────────────────
 
 def process_uploaded_excel(uploaded_file):
@@ -441,11 +436,17 @@ def process_uploaded_excel(uploaded_file):
     Read the single-sheet Excel template.
     Expects columns with prefixes: CT_, LE_, LG_, AC_, HR_, FR_
     """
-    # Read the first sheet (regardless of name)
+    # Read the first sheet
     df = pd.read_excel(uploaded_file, sheet_name=0)
+    
+    # ─── DEBUG: Show raw data on the page ───
+    st.subheader("🔍 Raw Data Inspection")
+    st.write("**First 5 rows of the uploaded file:**")
+    st.dataframe(df.head(5))
+    st.write("**Column names (first 20):**")
+    st.write(df.columns.tolist()[:20])
+    
     debug = {}
-
-    # ── Debug: Show column names ──
     debug["columns_detected"] = df.columns.tolist()
     debug["num_rows"] = len(df)
 
@@ -502,8 +503,8 @@ def process_uploaded_excel(uploaded_file):
         school = {
             "id": safe_str(row.get("School ID", idx)),
             "name": safe_str(row.get("School Name", f"School {idx}")),
-            "type": safe_str(row.get("School Type", "")),
-            "degree": safe_str(row.get("School Type", "")),
+            "type": safe_str(row.get("School Type", row.get("Offering", ""))),  # fallback to Offering
+            "degree": safe_str(row.get("School Type", row.get("Offering", ""))),
             "sdo_id": safe_str(row.get("Division", "")),
             "data_status": safe_str(row.get("Data Status", "Complete")),
             "lat": safe_float(row.get("Latitude", 0)),
@@ -521,8 +522,9 @@ def process_uploaded_excel(uploaded_file):
 
     # ── Build SDO list ──
     sdo_names = set(s["sdo_id"] for s in schools if s["sdo_id"])
-    sdo_list = []
+    debug["sdo_names_found"] = list(sdo_names)
 
+    sdo_list = []
     for sdo_name in sdo_names:
         div_schools = [s for s in schools if s["sdo_id"] == sdo_name]
         lat = div_schools[0]["lat"] if div_schools else 0.0
@@ -553,6 +555,9 @@ def process_uploaded_excel(uploaded_file):
     debug["sample_sdo_scores"] = sdo_list[0]["dimension_scores"] if sdo_list else None
     debug["num_sdo"] = len(sdo_list)
     debug["num_schools"] = len(schools)
+
+    # Show SDO names found
+    st.write("**Division names found in data:**", debug["sdo_names_found"])
 
     return sdo_list, schools, debug
 
@@ -586,7 +591,6 @@ if selected_sdo_id is None:
     st.warning("No division selected. Please select a division from the sidebar.")
     st.stop()
 
-# Ensure selected_sdo has all fields
 if selected_sdo is not None:
     if "capital" not in selected_sdo or pd.isna(selected_sdo.get("capital")):
         selected_sdo["capital"] = ""
