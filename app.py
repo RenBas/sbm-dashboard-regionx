@@ -478,7 +478,7 @@ def process_uploaded_excel(uploaded_file):
                 vals = pd.to_numeric(row[cols], errors="coerce").dropna()
                 dimension_scores[dim_idx] = vals.mean() if not vals.empty else 0.0
 
-        # ── ENROLLMENT FIX: ensure a minimum value of 1 so the dot is always visible ──
+        # Ensure enrollment is at least 1 so dot is visible even if missing
         enrollment_raw = safe_int(row.get("Enrollment", 0))
         enrollment = enrollment_raw if enrollment_raw > 0 else 1
 
@@ -491,7 +491,7 @@ def process_uploaded_excel(uploaded_file):
             "data_status": safe_str(row.get("Data Status", "Complete")),
             "lat": safe_float(row.get("Latitude", 0)),
             "lng": safe_float(row.get("Longitude", 0)),
-            "enrollment": enrollment,   # <-- guaranteed ≥ 1
+            "enrollment": enrollment,
             "urban_rural": safe_str(row.get("Urban/Rural", "Urban")),
             "head_name": safe_str(row.get("School Head Name", "")),
             "head_email": safe_str(row.get("School Head Email", "")),
@@ -510,14 +510,14 @@ def process_uploaded_excel(uploaded_file):
     for sdo_name in sdo_names:
         div_schools = [s for s in schools if s["sdo_id"] == sdo_name]
 
-        # Pick first school with non-zero coordinates as SDO location
+        # Pick first school with non-zero coordinates for SDO location
         lat, lng = 0.0, 0.0
         for s in div_schools:
             if s["lat"] != 0.0 or s["lng"] != 0.0:
                 lat, lng = s["lat"], s["lng"]
                 break
         if lat == 0.0 and lng == 0.0 and div_schools:
-            lat, lng = div_schools[0]["lat"], div_schools[0]["lng"]   # remains (0,0) if all zero
+            lat, lng = div_schools[0]["lat"], div_schools[0]["lng"]
 
         complete_div = [s for s in div_schools if s["data_status"] != "Pending"]
         dim_scores = [0.0] * 6
@@ -530,6 +530,10 @@ def process_uploaded_excel(uploaded_file):
         lowest_dim_score = min(dim_scores) if any(dim_scores) else 0.0
         overall_index = round(sum(dim_scores) / 6, 1) if any(dim_scores) else 0.0
 
+        # ➕ NEW: compute the name of the dimension with the lowest score
+        lowest_dim_idx = dim_scores.index(min(dim_scores))
+        lowest_dim_name = DIMENSION_NAMES[lowest_dim_idx]
+
         sdo_list.append({
             "id": sdo_name,
             "name": sdo_name,
@@ -538,6 +542,7 @@ def process_uploaded_excel(uploaded_file):
             "lng": lng,
             "dimension_scores": dim_scores,
             "lowest_dim_score": lowest_dim_score,
+            "lowest_dim_name": lowest_dim_name,   # <-- required by map popup
             "overall_index": overall_index
         })
 
