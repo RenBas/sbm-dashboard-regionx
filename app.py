@@ -195,11 +195,12 @@ filtered_sdos = filtered_data.get("filtered_sdos", [])
 filtered_schools = filtered_data.get("filtered_schools", [])
 
 # ────────────────────────────────────────────────────────────────
-# 4. SELECTED SDO
+# 4. SELECTED SDO (fixed for uploaded data)
 # ────────────────────────────────────────────────────────────────
 selected_sdo = None
 selected_sdo_id = None
 
+# If user came from "Jump to Division" button
 if "go_to_division" in st.session_state:
     target_div_name = st.session_state.go_to_division
     for sdo in sdo_list:
@@ -209,6 +210,7 @@ if "go_to_division" in st.session_state:
             break
     del st.session_state.go_to_division
 
+# If no division selected yet, pick the first SDO from the uploaded data
 if selected_sdo is None and sdo_list:
     if is_school_head(user):
         if filtered_schools:
@@ -229,6 +231,15 @@ if selected_sdo is None and sdo_list:
         else:
             selected_sdo = sdo_list[0] if sdo_list else None
             selected_sdo_id = selected_sdo["id"] if selected_sdo else None
+
+# Ensure the selected SDO has valid fields
+if selected_sdo is not None:
+    # Set a default capital if missing
+    if "capital" not in selected_sdo or pd.isna(selected_sdo.get("capital")):
+        selected_sdo["capital"] = ""
+    # Ensure name is a string
+    if "name" in selected_sdo:
+        selected_sdo["name"] = str(selected_sdo["name"])
 
 if selected_sdo_id is not None:
     schools_in_sdo = get_schools_by_sdo(filtered_schools, selected_sdo_id) if filtered_schools else []
@@ -422,7 +433,7 @@ with st.sidebar:
     st.caption("DepEd Region X – Northern Mindanao")
 
 # ────────────────────────────────────────────────────────────────
-# 6. PROCESS UPLOAD – SINGLE-SHEET TEMPLATE (with NaN fix)
+# 6. PROCESS UPLOAD – SINGLE-SHEET TEMPLATE
 # ────────────────────────────────────────────────────────────────
 
 def process_uploaded_excel(uploaded_file):
@@ -483,19 +494,24 @@ def process_uploaded_excel(uploaded_file):
             v = pd.to_numeric(val, errors='coerce')
             return 0 if pd.isna(v) else int(v)
 
+        def safe_str(val):
+            if pd.isna(val):
+                return ""
+            return str(val)
+
         school = {
-            "id": str(row.get("School ID", idx)),
-            "name": str(row.get("School Name", f"School {idx}")),
-            "type": str(row.get("School Type", "")),
-            "degree": str(row.get("School Type", "")),
-            "sdo_id": str(row.get("Division", "")),
-            "data_status": str(row.get("Data Status", "Complete")),
+            "id": safe_str(row.get("School ID", idx)),
+            "name": safe_str(row.get("School Name", f"School {idx}")),
+            "type": safe_str(row.get("School Type", "")),
+            "degree": safe_str(row.get("School Type", "")),
+            "sdo_id": safe_str(row.get("Division", "")),
+            "data_status": safe_str(row.get("Data Status", "Complete")),
             "lat": safe_float(row.get("Latitude", 0)),
             "lng": safe_float(row.get("Longitude", 0)),
             "enrollment": safe_int(row.get("Enrollment", 0)),
-            "urban_rural": str(row.get("Urban/Rural", "Urban")),
-            "head_name": str(row.get("School Head Name", "")),
-            "head_email": str(row.get("School Head Email", "")),
+            "urban_rural": safe_str(row.get("Urban/Rural", "Urban")),
+            "head_name": safe_str(row.get("School Head Name", "")),
+            "head_email": safe_str(row.get("School Head Email", "")),
             "dimension_scores": dimension_scores,
             "overall_index": sum(dimension_scores) / 6
         }
@@ -569,6 +585,13 @@ if not sdo_list or not schools:
 if selected_sdo_id is None:
     st.warning("No division selected. Please select a division from the sidebar.")
     st.stop()
+
+# Ensure selected_sdo has all fields
+if selected_sdo is not None:
+    if "capital" not in selected_sdo or pd.isna(selected_sdo.get("capital")):
+        selected_sdo["capital"] = ""
+    if "name" in selected_sdo:
+        selected_sdo["name"] = str(selected_sdo["name"])
 
 # ─── DIVISION HEADER ───
 st.markdown(f"## 🎓 SBM Dashboard: {selected_sdo['name']}")
