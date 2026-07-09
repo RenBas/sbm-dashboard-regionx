@@ -9,32 +9,18 @@ from .constants import DIMENSION_NAMES, SHIELD_COLORS, DEGREE_COLORS
 # ─── COLOR HELPERS ───
 
 def score_to_color(score):
-    """
-    Return a hex colour based on an SBM index score.
-    Colours match the urgency scale used throughout the dashboard:
-        Red    (< 1.0)   Critical
-        Orange (1.0‑1.9) Warning
-        Yellow (2.0‑2.4) Monitor
-        Green  (≥ 2.5)   Stable
-    """
+    """Return hex colour based on SBM index (red/orange/yellow/green)."""
     if score < 1.0:
-        return '#dc2626'   # red
+        return '#dc2626'
     elif score < 2.0:
-        return '#f97316'   # orange
+        return '#f97316'
     elif score < 2.5:
-        return '#eab308'   # yellow
+        return '#eab308'
     else:
-        return '#22c55e'   # green
+        return '#22c55e'
 
 def get_shield_color(score):
-    """
-    Shield colour now uses the same urgency scale as school dots.
-    (This replaces the previous SHIELD_COLORS lookup.)
-    """
     return score_to_color(score)
-
-def get_school_dot_color(degree):
-    return DEGREE_COLORS.get(degree, "#9ca3af")
 
 def get_school_dot_size(enrollment):
     if enrollment == 0:
@@ -49,11 +35,7 @@ def get_school_dot_size(enrollment):
 # ─── SHIELD SVG GENERATOR ───
 
 def create_shield_svg(color, size=32, label=""):
-    if color.startswith('#'):
-        hex_color = color
-    else:
-        hex_color = color
-    
+    hex_color = color if color.startswith('#') else color
     svg = f'''
     <svg width="{size}" height="{size}" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
         <defs>
@@ -81,34 +63,24 @@ def create_shield_svg(color, size=32, label=""):
     b64 = base64.b64encode(svg_bytes).decode('utf-8')
     return f"data:image/svg+xml;base64,{b64}"
 
-# ─── ANIMATED GLOW (DivIcon) ───
+# ─── ANIMATED GLOW ───
 
 def create_glow_html(urgency):
-    """
-    Create an animated glow effect using HTML/CSS with radial gradient.
-    Returns HTML string for DivIcon.
-    
-    NOTE: If no glow appears, ensure that the 'urgency_factor' key
-    is properly calculated and stored in each SDO dictionary.
-    """
     if urgency <= 0.1:
         return None
-    
     if urgency > 0.7:
-        glow_color = "#dc2626"  # Red
+        glow_color = "#dc2626"
         glow_opacity = 0.55
         pulse_duration = 1.2
     elif urgency > 0.4:
-        glow_color = "#f97316"  # Orange
+        glow_color = "#f97316"
         glow_opacity = 0.45
         pulse_duration = 1.8
     else:
-        glow_color = "#eab308"  # Yellow
+        glow_color = "#eab308"
         glow_opacity = 0.35
         pulse_duration = 2.4
-    
     size = 50 + urgency * 50
-    
     css = '''
     <style>
         @keyframes pulseGlow {
@@ -117,7 +89,6 @@ def create_glow_html(urgency):
         }
     </style>
     '''
-    
     html = f'''
     {css}
     <div style="position:relative;width:{size}px;height:{size}px;pointer-events:none;">
@@ -130,23 +101,16 @@ def create_glow_html(urgency):
         </div>
     </div>
     '''
-    
     return html
 
 # ─── MARKER FUNCTIONS ───
 
 def add_sdo_shield(map_obj, sdo):
-    """
-    Add an SDO marker with:
-    - Animated glow (DivIcon) – requires 'urgency_factor' in SDO dict.
-    - Shield (CustomIcon) – colour based on lowest dimension score.
-    Tooltip shows overall SBM index, lowest dimension, and urgency factor.
-    """
-    score = sdo["lowest_dim_score"]
+    score = sdo.get("lowest_dim_score", 0)
     color = get_shield_color(score)
-    label = sdo["name"].replace("SDO ", "").split(" ")[0][:3]
+    label = sdo.get("name", "SDO").replace("SDO ", "").split(" ")[0][:3]
     urgency = sdo.get("urgency_factor", 0)
-    
+
     # Glow
     glow_html = create_glow_html(urgency)
     if glow_html:
@@ -157,11 +121,11 @@ def add_sdo_shield(map_obj, sdo):
             popup_anchor=(0, -50)
         )
         folium.Marker(
-            location=[sdo["lat"], sdo["lng"]],
+            location=[sdo.get("lat", 0), sdo.get("lng", 0)],
             icon=glow_icon,
             opacity=1
         ).add_to(map_obj)
-    
+
     # Shield
     icon_url = create_shield_svg(color, size=32, label=label)
     icon = folium.CustomIcon(
@@ -170,16 +134,16 @@ def add_sdo_shield(map_obj, sdo):
         icon_anchor=(16, 16),
         popup_anchor=(0, -16)
     )
-    
-    # Tooltip with SBM index, lowest dimension, urgency
-    tooltip = (
-        f"{sdo['name']} | SBM Index: {sdo['overall_index']:.1f} | "
-        f"Lowest: {sdo['lowest_dim_name']} ({sdo['lowest_dim_score']:.1f}) | "
-        f"Urgency: {urgency:.2f}"
-    )
-    
+
+    # Tooltip – safe with defaults
+    name = sdo.get("name", "Division")
+    overall = sdo.get("overall_index", 0)
+    low_dim = sdo.get("lowest_dim_name", "N/A")
+    low_score = sdo.get("lowest_dim_score", 0)
+    tooltip = f"{name} | SBM Index: {overall:.1f} | Lowest: {low_dim} ({low_score:.1f}) | Urgency: {urgency:.2f}"
+
     folium.Marker(
-        location=[sdo["lat"], sdo["lng"]],
+        location=[sdo.get("lat", 0), sdo.get("lng", 0)],
         popup=folium.Popup(get_sdo_popup_html(sdo), max_width=250),
         icon=icon,
         tooltip=tooltip
@@ -187,22 +151,14 @@ def add_sdo_shield(map_obj, sdo):
 
 
 def add_school_dot(map_obj, school):
-    """
-    Add a colour‑coded school dot.
-    - Colour: based on overall SBM index (red/orange/yellow/green).
-    - Size: based on enrollment.
-    - Tooltip: overall index, lowest dimension.
-    - Pending schools are grey with dashed border.
-    """
-    is_pending = school["data_status"] == "Pending"
-    
+    is_pending = school.get("data_status") == "Pending"
     if is_pending:
         fill_color = "#9ca3af"
         border_color = "#6b7280"
         weight = 3
         dash_array = "5,5"
         fill_opacity = 0.4
-        tooltip = f"{school['name']}  (Data Pending)"
+        tooltip = f"{school.get('name', 'School')} (Data Pending)"
     else:
         score = school.get("overall_index", 0)
         fill_color = score_to_color(score)
@@ -210,17 +166,16 @@ def add_school_dot(map_obj, school):
         weight = 2
         dash_array = None
         fill_opacity = 0.9
-        # Tooltip with overall index and lowest dimension
-        low_dim = DIMENSION_NAMES[school["lowest_dim_index"]]
+        low_dim_idx = school.get("lowest_dim_index", 0)
+        low_dim_name = DIMENSION_NAMES[low_dim_idx] if 0 <= low_dim_idx < len(DIMENSION_NAMES) else "?"
         tooltip = (
-            f"{school['name']} | SBM Index: {school['overall_index']:.1f} | "
-            f"Lowest: {low_dim} ({school['lowest_dim_score']:.1f})"
+            f"{school.get('name', 'School')} | SBM Index: {score:.1f} | "
+            f"Lowest: {low_dim_name} ({school.get('lowest_dim_score', 0):.1f})"
         )
-    
-    size = get_school_dot_size(school["enrollment"])
-    
+
+    size = get_school_dot_size(school.get("enrollment", 0))
     folium.CircleMarker(
-        location=[school["lat"], school["lng"]],
+        location=[school.get("lat", 0), school.get("lng", 0)],
         radius=size,
         color=border_color,
         weight=weight,
@@ -236,34 +191,47 @@ def add_school_dot(map_obj, school):
 # ─── POPUP HTML HELPERS ───
 
 def get_sdo_popup_html(sdo):
+    name = sdo.get("name", "SDO")
+    capital = sdo.get("capital", "")
+    overall = sdo.get("overall_index", 0)
+    low_name = sdo.get("lowest_dim_name", "N/A")
+    low_score = sdo.get("lowest_dim_score", 0)
+    urgency = sdo.get("urgency_factor", 0)
     return f'''
-    <div style="font-weight:600;font-size:15px;color:#0033a0;">{sdo["name"]}</div>
-    <div style="font-size:12px;color:#4b5563;">{sdo["capital"]}</div>
+    <div style="font-weight:600;font-size:15px;color:#0033a0;">{name}</div>
+    <div style="font-size:12px;color:#4b5563;">{capital}</div>
     <hr style="margin:4px 0;">
     <div style="font-size:13px;">
-        <b>Overall Index:</b> {sdo["overall_index"]:.1f} / 3.0<br>
-        <b>Lowest Dimension:</b> {sdo["lowest_dim_name"]} ({sdo["lowest_dim_score"]:.1f})<br>
-        <b>Urgency Factor:</b> {sdo.get("urgency_factor", 0):.2f}<br>
+        <b>Overall Index:</b> {overall:.1f} / 3.0<br>
+        <b>Lowest Dimension:</b> {low_name} ({low_score:.1f})<br>
+        <b>Urgency Factor:</b> {urgency:.2f}<br>
         <span style="color:#6b7280;font-size:11px;">Click to zoom in</span>
     </div>
     '''
 
 def get_school_popup_html(school):
-    if school["data_status"] == "Pending":
+    if school.get("data_status") == "Pending":
         return f'''
-        <div style="font-weight:600;font-size:14px;color:#0033a0;">{school["name"]}</div>
-        <div style="font-size:12px;color:#4b5563;">{school["type"]} · ⏳ Data Pending</div>
+        <div style="font-weight:600;font-size:14px;color:#0033a0;">{school.get('name', '')}</div>
+        <div style="font-size:12px;color:#4b5563;">{school.get('type', '')} · ⏳ Data Pending</div>
         <hr style="margin:4px 0;">
         <div style="color:#6b7280;font-size:13px;">No SBM assessment submitted yet.</div>
         '''
-    
+    name = school.get("name", "")
+    stype = school.get("type", "")
+    enrollment = school.get("enrollment", 0)
+    degree = school.get("degree", "")
+    overall = school.get("overall_index", 0)
+    low_idx = school.get("lowest_dim_index", 0)
+    low_name = DIMENSION_NAMES[low_idx] if 0 <= low_idx < len(DIMENSION_NAMES) else "?"
+    low_score = school.get("lowest_dim_score", 0)
     return f'''
-    <div style="font-weight:600;font-size:14px;color:#0033a0;">{school["name"]}</div>
-    <div style="font-size:12px;color:#4b5563;">{school["type"]} · {school["enrollment"]:,} learners</div>
+    <div style="font-weight:600;font-size:14px;color:#0033a0;">{name}</div>
+    <div style="font-size:12px;color:#4b5563;">{stype} · {enrollment:,} learners</div>
     <hr style="margin:4px 0;">
     <div style="font-size:13px;">
-        <b>SBM Level:</b> {school["degree"]}<br>
-        <b>Overall Index:</b> {school["overall_index"]:.1f} / 3.0<br>
-        <b>Lowest Dim:</b> {DIMENSION_NAMES[school["lowest_dim_index"]]} ({school["lowest_dim_score"]:.1f})
+        <b>SBM Level:</b> {degree}<br>
+        <b>Overall Index:</b> {overall:.1f} / 3.0<br>
+        <b>Lowest Dim:</b> {low_name} ({low_score:.1f})
     </div>
     '''
