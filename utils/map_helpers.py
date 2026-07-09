@@ -31,6 +31,17 @@ def get_school_dot_size(enrollment):
     else:
         return 16
 
+def score_to_color(score):
+    """Return a hex colour based on SBM index (same urgency scale as shields)."""
+    if score < 1.0:
+        return '#dc2626'   # red – critical
+    elif score < 2.0:
+        return '#f97316'   # orange – warning
+    elif score < 2.5:
+        return '#eab308'   # yellow – monitor
+    else:
+        return '#22c55e'   # green – stable
+
 # ─── SHIELD SVG GENERATOR ───
 
 def create_shield_svg(color, size=32, label=""):
@@ -165,23 +176,38 @@ def add_sdo_shield(map_obj, sdo):
 
 
 def add_school_dot(map_obj, school):
-    """Add a school dot using standard folium CircleMarker."""
+    """
+    Add a colour‑coded school marker to the folium map.
+    - Colour is based on the school's overall SBM index (red/orange/yellow/green).
+    - Size is based on enrollment.
+    - Pending schools are shown in grey with a dashed border.
+    """
     is_pending = school["data_status"] == "Pending"
-    color = get_school_dot_color(school["degree"]) if not is_pending else "#9ca3af"
-    size = get_school_dot_size(school["enrollment"])
     
-    fill_opacity = 0.9 if not is_pending else 0.4
-    border_color = "#6b7280" if is_pending else "rgba(255,255,255,0.9)"
-    border_weight = 2 if not is_pending else 3
-    dash_array = "5,5" if is_pending else None
+    if is_pending:
+        fill_color = "#9ca3af"
+        border_color = "#6b7280"
+        weight = 3
+        dash_array = "5,5"
+        fill_opacity = 0.4
+    else:
+        # Use the overall SBM index to determine colour
+        score = school.get("overall_index", 0)
+        fill_color = score_to_color(score)
+        border_color = "rgba(255,255,255,0.9)"
+        weight = 2
+        dash_array = None
+        fill_opacity = 0.9
+    
+    size = get_school_dot_size(school["enrollment"])
     
     folium.CircleMarker(
         location=[school["lat"], school["lng"]],
         radius=size,
         color=border_color,
-        weight=border_weight,
+        weight=weight,
         fill=True,
-        fill_color=color,
+        fill_color=fill_color,
         fill_opacity=fill_opacity,
         dash_array=dash_array,
         popup=folium.Popup(get_school_popup_html(school), max_width=250),
