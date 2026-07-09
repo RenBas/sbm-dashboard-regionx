@@ -435,63 +435,61 @@ with st.sidebar:
 def process_uploaded_excel(uploaded_file):
     """
     Read the uploaded Excel and build sdo_list and schools.
-    Auto‑detects whether the file uses 4 or 6 dimensions and maps accordingly.
+    Uses robust substring matching for dimension mapping.
     """
     df_schools = pd.read_excel(uploaded_file, sheet_name="School Information")
     df_assessment = pd.read_excel(uploaded_file, sheet_name="SBM Assessment")
 
-    # ──────────────────────────────────────────────────────────────
-    # 1. DETECT WHICH DIMENSIONS ARE PRESENT IN THE UPLOADED DATA
-    # ──────────────────────────────────────────────────────────────
-    uploaded_dim_names = df_assessment["Dimension"].unique().tolist()
-    print(f"[DEBUG] Detected dimensions: {uploaded_dim_names}")
+    # Force Score to numeric
+    df_assessment["Score"] = pd.to_numeric(df_assessment["Score"], errors="coerce")
 
     # ──────────────────────────────────────────────────────────────
-    # 2. BUILD THE MAPPING DYNAMICALLY
+    # 1. DETECT DIMENSION NAMES (clean)
     # ──────────────────────────────────────────────────────────────
-    # Dashboard dimension order (6)
-    DASHBOARD_DIMS = [
-        "Curriculum & Teaching",      # index 0
-        "Learning Environment",       # index 1
-        "Leadership",                 # index 2
-        "Governance & Accountability",# index 3
-        "HR & Team Development",      # index 4
-        "Finance & Resource Mgmt."    # index 5
-    ]
+    uploaded_dim_names = [d.strip() for d in df_assessment["Dimension"].unique().tolist()]
+    print("[DEBUG] Raw dimension names from file:", uploaded_dim_names)
 
-    # Mapping from uploaded dimension names to dashboard indices
+    # ──────────────────────────────────────────────────────────────
+    # 2. BUILD MAPPING USING SUBSTRING MATCHING
+    # ──────────────────────────────────────────────────────────────
+    # Dashboard indices: 0=Curriculum, 1=Learning, 2=Leadership, 3=Governance, 4=HR, 5=Finance
     DIM_MAP = {}
+    for dim in uploaded_dim_names:
+        dim_lower = dim.lower()
+        if "leadership" in dim_lower:
+            DIM_MAP[dim] = 2
+        elif "curriculum" in dim_lower and "instruction" in dim_lower:
+            DIM_MAP[dim] = 0
+        elif "accountability" in dim_lower:
+            DIM_MAP[dim] = 3
+        elif "management" in dim_lower and "resource" in dim_lower:
+            DIM_MAP[dim] = 5
+        elif "learning" in dim_lower and "environment" in dim_lower:
+            DIM_MAP[dim] = 1
+        elif "hr" in dim_lower or "human" in dim_lower:
+            DIM_MAP[dim] = 4
+        else:
+            # Try to match by first word (e.g., "Curriculum" -> index 0)
+            first_word = dim_lower.split()[0] if dim_lower.split() else ""
+            if first_word in ["curriculum", "leadership", "accountability", "management", "learning", "hr"]:
+                # Use a basic guess
+                if first_word == "curriculum":
+                    DIM_MAP[dim] = 0
+                elif first_word == "leadership":
+                    DIM_MAP[dim] = 2
+                elif first_word == "accountability":
+                    DIM_MAP[dim] = 3
+                elif first_word == "management":
+                    DIM_MAP[dim] = 5
+                elif first_word == "learning":
+                    DIM_MAP[dim] = 1
+                elif first_word == "hr":
+                    DIM_MAP[dim] = 4
+            else:
+                DIM_MAP[dim] = None  # will ignore
+                print(f"[WARNING] No mapping for dimension: '{dim}'")
 
-    # Scenario A: 4‑dimension format (current mock data)
-    if set(uploaded_dim_names) == {"Leadership and Governance", "Curriculum and Instruction", "Accountability and Continuous Improvement", "Management of Resources"}:
-        DIM_MAP = {
-            "Leadership and Governance": 2,               # -> Leadership
-            "Curriculum and Instruction": 0,              # -> Curriculum & Teaching
-            "Accountability and Continuous Improvement": 3,# -> Governance & Accountability
-            "Management of Resources": 5                  # -> Finance & Resource Mgmt.
-        }
-        print("[DEBUG] Using 4‑dimension mapping (mock data format).")
-
-    # Scenario B: 6‑dimension format (if uploaded names match dashboard names exactly)
-    elif set(uploaded_dim_names) == set(DASHBOARD_DIMS):
-        for dim in uploaded_dim_names:
-            DIM_MAP[dim] = DASHBOARD_DIMS.index(dim)
-        print("[DEBUG] Using 6‑dimension mapping (direct 1:1).")
-
-    # Scenario C: Unknown format – try to map by fuzzy matching or fallback to zeros
-    else:
-        print("[WARNING] Unknown dimension format. Falling back to zero mapping.")
-        # Attempt to match by substring (e.g., "Leadership" matches "Leadership and Governance")
-        for uploaded_dim in uploaded_dim_names:
-            matched = False
-            for i, dashboard_dim in enumerate(DASHBOARD_DIMS):
-                if dashboard_dim.lower() in uploaded_dim.lower() or uploaded_dim.lower() in dashboard_dim.lower():
-                    DIM_MAP[uploaded_dim] = i
-                    matched = True
-                    break
-            if not matched:
-                DIM_MAP[uploaded_dim] = None  # will be ignored
-        print(f"[DEBUG] Fuzzy mapping result: {DIM_MAP}")
+    print("[DEBUG] Final mapping:", DIM_MAP)
 
     # ──────────────────────────────────────────────────────────────
     # 3. BUILD SCHOOLS LIST
@@ -517,7 +515,7 @@ def process_uploaded_excel(uploaded_file):
         }
 
     # ──────────────────────────────────────────────────────────────
-    # 4. ASSIGN SCORES USING THE DYNAMIC MAPPING
+    # 4. ASSIGN SCORES
     # ──────────────────────────────────────────────────────────────
     dim_avg_df = df_assessment.groupby(["School ID", "Dimension"])["Score"].mean().reset_index()
 
@@ -526,7 +524,7 @@ def process_uploaded_excel(uploaded_file):
             continue
         scores = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         for _, row in group.iterrows():
-            dim_name = row["Dimension"]
+            dim_name = row["Dimension"].strip()
             if dim_name in DIM_MAP and DIM_MAP[dim_name] is not None:
                 idx = DIM_MAP[dim_name]
                 scores[idx] = row["Score"]
@@ -567,6 +565,12 @@ def process_uploaded_excel(uploaded_file):
             "dimension_scores": dim_scores,
             "lowest_dim_score": lowest_dim_score
         })
+
+    # Print sample scores for verification
+    if schools:
+        print("[DEBUG] Sample school scores:", schools[0]["dimension_scores"])
+    if sdo_list:
+        print("[DEBUG] Sample SDO scores:", sdo_list[0]["dimension_scores"])
 
     return sdo_list, schools
 
