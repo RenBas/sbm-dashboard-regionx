@@ -36,45 +36,117 @@ MOCK_USERS = {
         "division": None,
         "school_id": None
     },
-    # ── Division ──
+    # ── Division (matching the 14 divisions in the uploaded data file) ──
+    "sdo_valencia_city": {
+        "username": "sdo_valencia_city",
+        "password": "sdo123",
+        "role": "division",
+        "name": "SDO Valencia City Superintendent",
+        "division": "Valencia City",
+        "school_id": None
+    },
     "sdo_bukidnon": {
         "username": "sdo_bukidnon",
         "password": "sdo123",
         "role": "division",
         "name": "SDO Bukidnon Superintendent",
-        "division": "SDO Bukidnon",
+        "division": "Bukidnon",
         "school_id": None
     },
-    "sdo_cdo": {
-        "username": "sdo_cdo",
-        "password": "sdo123",
-        "role": "division",
-        "name": "SDO Cagayan de Oro Superintendent",
-        "division": "SDO Cagayan de Oro City",
-        "school_id": None
-    },
-    "sdo_misamis_occ": {
-        "username": "sdo_misamis_occ",
+    "sdo_misamis_occidental": {
+        "username": "sdo_misamis_occidental",
         "password": "sdo123",
         "role": "division",
         "name": "SDO Misamis Occidental Superintendent",
-        "division": "SDO Misamis Occidental",
+        "division": "Misamis Occidental",
         "school_id": None
     },
-    "sdo_iligan": {
-        "username": "sdo_iligan",
+    "sdo_camiguin": {
+        "username": "sdo_camiguin",
+        "password": "sdo123",
+        "role": "division",
+        "name": "SDO Camiguin Superintendent",
+        "division": "Camiguin",
+        "school_id": None
+    },
+    "sdo_malaybalay_city": {
+        "username": "sdo_malaybalay_city",
+        "password": "sdo123",
+        "role": "division",
+        "name": "SDO Malaybalay City Superintendent",
+        "division": "Malaybalay City",
+        "school_id": None
+    },
+    "sdo_oroquieta_city": {
+        "username": "sdo_oroquieta_city",
+        "password": "sdo123",
+        "role": "division",
+        "name": "SDO Oroquieta City Superintendent",
+        "division": "Oroquieta City",
+        "school_id": None
+    },
+    "sdo_gingoog_city": {
+        "username": "sdo_gingoog_city",
+        "password": "sdo123",
+        "role": "division",
+        "name": "SDO Gingoog City Superintendent",
+        "division": "Gingoog City",
+        "school_id": None
+    },
+    "sdo_lanao_del_norte": {
+        "username": "sdo_lanao_del_norte",
+        "password": "sdo123",
+        "role": "division",
+        "name": "SDO Lanao del Norte Superintendent",
+        "division": "Lanao del Norte",
+        "school_id": None
+    },
+    "sdo_iligan_city": {
+        "username": "sdo_iligan_city",
         "password": "sdo123",
         "role": "division",
         "name": "SDO Iligan City Superintendent",
-        "division": "SDO Iligan City",
+        "division": "Iligan City",
         "school_id": None
     },
-    "sdo_valencia": {
-        "username": "sdo_valencia",
+    "sdo_misamis_oriental": {
+        "username": "sdo_misamis_oriental",
         "password": "sdo123",
         "role": "division",
-        "name": "SDO Valencia City Superintendent",
-        "division": "SDO Valencia City",
+        "name": "SDO Misamis Oriental Superintendent",
+        "division": "Misamis Oriental",
+        "school_id": None
+    },
+    "sdo_tangub_city": {
+        "username": "sdo_tangub_city",
+        "password": "sdo123",
+        "role": "division",
+        "name": "SDO Tangub City Superintendent",
+        "division": "Tangub City",
+        "school_id": None
+    },
+    "sdo_cagayan_de_oro_city": {
+        "username": "sdo_cagayan_de_oro_city",
+        "password": "sdo123",
+        "role": "division",
+        "name": "SDO Cagayan de Oro City Superintendent",
+        "division": "Cagayan de Oro City",
+        "school_id": None
+    },
+    "sdo_el_salvador": {
+        "username": "sdo_el_salvador",
+        "password": "sdo123",
+        "role": "division",
+        "name": "SDO El Salvador Superintendent",
+        "division": "El Salvador",
+        "school_id": None
+    },
+    "sdo_ozamiz_city": {
+        "username": "sdo_ozamiz_city",
+        "password": "sdo123",
+        "role": "division",
+        "name": "SDO Ozamiz City Superintendent",
+        "division": "Ozamis City",
         "school_id": None
     },
     # ── School Heads ──

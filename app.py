@@ -433,28 +433,101 @@ with st.sidebar:
 
 def process_uploaded_excel(uploaded_file):
     """
-    Read the single-sheet Excel template.
-    Expects columns with prefixes: CT_, LE_, LG_, AC_, HR_, FR_
+    Read the multi-sheet Excel template.
+    Expects:
+    - Sheet 0 or 'School Information': School metadata
+    - Sheet 1 or 'SBM Assessment': Assessment scores by indicator/dimension
     """
-    # Read the first sheet
-    df = pd.read_excel(uploaded_file, sheet_name=0)
+    # Read both sheets
+    xls = pd.ExcelFile(uploaded_file)
+    sheet_names = xls.sheet_names
+    
+    # Determine sheet names
+    school_sheet = 'School Information' if 'School Information' in sheet_names else 0
+    assessment_sheet = 'SBM Assessment' if 'SBM Assessment' in sheet_names else (1 if len(sheet_names) > 1 else None)
+    
+    # Read school information
+    school_df = pd.read_excel(xls, sheet_name=school_sheet)
+    
     debug = {}
-    debug["columns_detected"] = df.columns.tolist()
-    debug["num_rows"] = len(df)
+    debug["columns_detected"] = school_df.columns.tolist()
+    debug["num_rows_school"] = len(school_df)
+    debug["sheets_found"] = sheet_names
+    
+    # Read assessment data if available
+    dim_scores_by_school = {}
+    if assessment_sheet is not None:
+        try:
+            assessment_df = pd.read_excel(xls, sheet_name=assessment_sheet)
+            debug["num_rows_assessment"] = len(assessment_df)
+            
+            # Map dimension names to indices (standard 6 dimensions)
+            # Note: Data file may only have 4 dimensions, we fill missing with 0
+            dimension_map = {
+                "Leadership and Governance": 0,
+                "Curriculum and Instruction": 1,
+                "Learning Environment": 2,  # May not be in data
+                "Accountability and Continuous Improvement": 3,
+                "Management of Resources": 4,
+                "Finance & Resource Management": 5  # May not be in data
+            }
+            
+            # Also try alternative mappings (match prefix_map above)
+            alt_dimension_map = {
+                "LG_": 0, "CI_": 1, "LE_": 2, "AC_": 3, "MR_": 4, "FR_": 5
+            }
+            
+            # Pivot assessment data to get one row per school with dimension averages
+            if 'Dimension' in assessment_df.columns and 'Score' in assessment_df.columns:
+                pivot = assessment_df.pivot_table(
+                    index=['School ID'],
+                    columns='Dimension',
+                    values='Score',
+                    aggfunc='mean'
+                ).reset_index()
+                
+                # Convert to dict for easy lookup
+                for _, row in pivot.iterrows():
+                    school_id = str(row['School ID'])
+                    scores = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+                    for dim_name, dim_idx in dimension_map.items():
+                        if dim_name in row and pd.notna(row[dim_name]):
+                            scores[dim_idx] = float(row[dim_name])
+                    dim_scores_by_school[school_id] = scores
+                    
+                debug["schools_with_scores"] = len(dim_scores_by_school)
+                debug["dimensions_found_in_data"] = [c for c in pivot.columns if c != 'School ID']
+            elif any(col.startswith(tuple(alt_dimension_map.keys())) for col in assessment_df.columns):
+                # Handle wide format with prefixed columns
+                for idx, row in assessment_df.iterrows():
+                    school_id = str(row.get('School ID', idx))
+                    scores = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+                    for prefix, dim_idx in alt_dimension_map.items():
+                        matching_cols = [c for c in assessment_df.columns if c.startswith(prefix)]
+                        if matching_cols:
+                            vals = pd.to_numeric(row[matching_cols], errors="coerce").dropna()
+                            if not vals.empty:
+                                scores[dim_idx] = vals.mean()
+                    dim_scores_by_school[school_id] = scores
+                debug["schools_with_scores"] = len(dim_scores_by_school)
+        except Exception as e:
+            debug["assessment_error"] = str(e)
+    else:
+        debug["assessment_sheet"] = "Not found"
 
-    # ── Define the six dimension prefixes ──
+    # ── Define the six dimension prefixes (fallback for single-sheet format) ──
     prefix_map = {
-        "CT_": 0,   # Curriculum & Teaching
-        "LE_": 1,   # Learning Environment
-        "LG_": 2,   # Leadership and Governance
+        "LG_": 0,   # Leadership and Governance
+        "CI_": 1,   # Curriculum & Instruction  
+        "LE_": 2,   # Learning Environment
         "AC_": 3,   # Accountability and Continuous Improvement
-        "HR_": 4,   # HR & Team Development
+        "MR_": 4,   # Management of Resources
         "FR_": 5    # Finance & Resource Management
     }
 
-    # ── Identify which columns belong to each dimension ──
+    # ── Identify which columns belong to each dimension (for single-sheet fallback) ──
     dim_columns = {idx: [] for idx in range(6)}
-    for col in df.columns:
+    for col in school_df.columns:
         for prefix, idx in prefix_map.items():
             if col.startswith(prefix):
                 dim_columns[idx].append(col)
@@ -464,19 +537,22 @@ def process_uploaded_excel(uploaded_file):
 
     # ── Build schools list (with safe NaN handling) ──
     schools = []
-    for idx, row in df.iterrows():
-        # Convert dimension scores safely
-        dimension_scores = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-        for dim_idx in range(6):
-            cols = dim_columns[dim_idx]
-            if cols:
-                vals = pd.to_numeric(row[cols], errors="coerce").dropna()
-                if not vals.empty:
-                    dimension_scores[dim_idx] = vals.mean()
-                else:
-                    dimension_scores[dim_idx] = 0.0
-            else:
-                dimension_scores[dim_idx] = 0.0
+    for idx, row in school_df.iterrows():
+        school_id = str(row.get("School ID", idx))
+        
+        # Get dimension scores from assessment data if available
+        dimension_scores = dim_scores_by_school.get(school_id, [0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+        
+        # If no assessment data found, try to compute from inline columns (fallback)
+        if all(s == 0.0 for s in dimension_scores) and any(dim_columns.values()):
+            for dim_idx in range(6):
+                cols = dim_columns[dim_idx]
+                if cols:
+                    vals = pd.to_numeric(row[cols], errors="coerce").dropna()
+                    if not vals.empty:
+                        dimension_scores[dim_idx] = vals.mean()
+                    else:
+                        dimension_scores[dim_idx] = 0.0
 
         # Safe conversion of metadata
         def safe_float(val):
@@ -495,8 +571,8 @@ def process_uploaded_excel(uploaded_file):
         school = {
             "id": safe_str(row.get("School ID", idx)),
             "name": safe_str(row.get("School Name", f"School {idx}")),
-            "type": safe_str(row.get("School Type", row.get("Offering", ""))),  # fallback to Offering
-            "degree": safe_str(row.get("School Type", row.get("Offering", ""))),
+            "type": safe_str(row.get("School Type", row.get("Offering", ""))),
+            "degree": safe_str(row.get("Degree of Manifestation", "Pending")),
             "sdo_id": safe_str(row.get("Division", "")),
             "data_status": safe_str(row.get("Data Status", "Complete")),
             "lat": safe_float(row.get("Latitude", 0)),
@@ -506,7 +582,9 @@ def process_uploaded_excel(uploaded_file):
             "head_name": safe_str(row.get("School Head Name", "")),
             "head_email": safe_str(row.get("School Head Email", "")),
             "dimension_scores": dimension_scores,
-            "overall_index": sum(dimension_scores) / 6
+            "overall_index": sum(dimension_scores) / len([s for s in dimension_scores if s > 0]) if any(s > 0 for s in dimension_scores) else 0,
+            "lowest_dim_index": dimension_scores.index(min(dimension_scores)) if any(s > 0 for s in dimension_scores) else 0,
+            "lowest_dim_score": min(dimension_scores) if any(s > 0 for s in dimension_scores) else 0
         }
         schools.append(school)
 
@@ -533,6 +611,19 @@ def process_uploaded_excel(uploaded_file):
             dim_scores = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 
         lowest_dim_score = min(dim_scores) if any(dim_scores) else 0.0
+        lowest_dim_index = dim_scores.index(lowest_dim_score) if any(dim_scores) else 0
+        lowest_dim_name = DIMENSION_NAMES[lowest_dim_index]
+        
+        # Calculate urgency factor (1 = most urgent, 0 = least urgent)
+        all_lowest = [min(s.get("dimension_scores", [0,0,0,0,0,0])) for s in complete_div_schools if any(s.get("dimension_scores", [0,0,0,0,0,0]))]
+        if all_lowest:
+            min_score = min(all_lowest)
+            max_score = max(all_lowest)
+            range_val = max_score - min_score if max_score > min_score else 0.001
+            raw = (lowest_dim_score - min_score) / range_val
+            urgency_factor = round(1 - raw, 3)
+        else:
+            urgency_factor = 0.0
 
         sdo_list.append({
             "id": sdo_name,
@@ -541,7 +632,11 @@ def process_uploaded_excel(uploaded_file):
             "lat": lat,
             "lng": lng,
             "dimension_scores": dim_scores,
-            "lowest_dim_score": lowest_dim_score
+            "lowest_dim_score": lowest_dim_score,
+            "lowest_dim_index": lowest_dim_index,
+            "lowest_dim_name": lowest_dim_name,
+            "urgency_factor": urgency_factor,
+            "overall_index": sum(dim_scores) / len([s for s in dim_scores if s > 0]) if any(s > 0 for s in dim_scores) else 0
         })
 
     debug["sample_sdo_scores"] = sdo_list[0]["dimension_scores"] if sdo_list else None

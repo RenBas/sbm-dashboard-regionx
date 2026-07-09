@@ -7,25 +7,38 @@ from typing import Dict, List, Optional, Tuple
 # Constants
 # ----------------------------------------------------------------------
 DIMENSION_NAMES = [
-    "Core Teaching",
+    "Curriculum & Teaching",
     "Learning Environment",
-    "Leadership & Governance",
-    "Accountability",
-    "Human Resources",
-    "Financial Resources"
+    "Leadership",
+    "Governance & Accountability",
+    "Human Resource & Team Dev.",
+    "Finance & Resource Mgmt."
 ]
 
-# Generate all 42 indicator IDs from CT_1 to FR_42
+# Map indicator prefixes to dimension names based on actual data file
+INDICATOR_PREFIX_TO_DIM = {
+    "CT": "Curriculum & Teaching",
+    "LE": "Learning Environment",
+    "LG": "Leadership",
+    "AC": "Governance & Accountability",
+    "HR": "Human Resource & Team Dev.",
+    "FR": "Finance & Resource Mgmt."
+}
+
+# Build INDICATOR_IDS dynamically from the pattern in the data
+# CT_1 to CT_8, LE_9 to LE_18, LG_19 to LG_22, AC_23 to AC_28, HR_29 to HR_35, FR_36 to FR_42
 INDICATOR_IDS = []
-for dim_prefix in ["CT", "LE", "LG", "AC", "HR", "FR"]:
-    for i in range(1, 9):
-        INDICATOR_IDS.append(f"{dim_prefix}_{i}")
+for prefix, start_end in [("CT", (1, 8)), ("LE", (9, 18)), ("LG", (19, 22)), 
+                          ("AC", (23, 28)), ("HR", (29, 35)), ("FR", (36, 42))]:
+    for i in range(start_end[0], start_end[1] + 1):
+        INDICATOR_IDS.append(f"{prefix}_{i}")
 
 # Map indicator to dimension
 INDICATOR_TO_DIM = {}
-for dim_name, prefix in zip(DIMENSION_NAMES, ["CT", "LE", "LG", "AC", "HR", "FR"]):
-    for i in range(1, 9):
-        INDICATOR_TO_DIM[f"{prefix}_{i}"] = dim_name
+for indicator_id in INDICATOR_IDS:
+    prefix = indicator_id.split("_")[0]
+    if prefix in INDICATOR_PREFIX_TO_DIM:
+        INDICATOR_TO_DIM[indicator_id] = INDICATOR_PREFIX_TO_DIM[prefix]
 
 
 # ----------------------------------------------------------------------
@@ -39,29 +52,69 @@ def process_uploaded_data(df: pd.DataFrame) -> Dict:
     data = df.copy()
     data.columns = data.columns.str.strip()
 
-    # Identify existing indicator columns
-    existing_indicators = [col for col in INDICATOR_IDS if col in data.columns]
+    # Identify existing indicator columns - match by prefix pattern since column names have full text
+    # e.g., "CT_1. Grade 3 learners achieve..." should match CT_1
+    existing_indicators = []
+    for col in data.columns:
+        col_stripped = col.strip()
+        # Check if column starts with any known indicator pattern (e.g., CT_1, LE_9, etc.)
+        for ind_id in INDICATOR_IDS:
+            if col_stripped.startswith(ind_id):
+                existing_indicators.append(ind_id)
+                break
+    
     if not existing_indicators:
-        raise ValueError("No indicator columns (CT_1 ... FR_42) found.")
+        raise ValueError("No indicator columns (CT_1 ... FR_42) found in the uploaded file.")
 
-    # Prepare school info
-    school_info = data[["School ID", "School Name", "Division", "Latitude", "Longitude", "Offering"]].copy()
+    # Prepare school info - handle column name variations
+    required_cols = ["School ID", "School Name", "Division", "Latitude", "Longitude"]
+    for col in required_cols:
+        if col not in data.columns:
+            raise ValueError(f"Missing required column: {col}")
+    
+    school_info = data[required_cols].copy()
+    # Handle 'School Type' or 'Offering' column
+    if "School Type" in data.columns:
+        school_info["Offering"] = data["School Type"]
+    elif "Offering" in data.columns:
+        school_info["Offering"] = data["Offering"]
+    else:
+        school_info["Offering"] = "Elementary"
+        
     if "Enrollment" in data.columns:
         school_info["Enrollment"] = pd.to_numeric(data["Enrollment"], errors='coerce').fillna(0).astype(int)
     else:
         school_info["Enrollment"] = 0
 
     school_info["School ID"] = school_info["School ID"].astype(str)
-    school_info["Latitude"] = pd.to_numeric(school_info["Latitude"], errors='coerce').fillna(0.0)
-    school_info["Longitude"] = pd.to_numeric(school_info["Longitude"], errors='coerce').fillna(0.0)
+    school_info["Latitude"] = pd.to_numeric(school_info["Latitude"], errors='coerce')
+    school_info["Longitude"] = pd.to_numeric(school_info["Longitude"], errors='coerce')
+    # Fill NaN coordinates with 0 (will be filtered out later for map rendering)
+    school_info["Latitude"] = school_info["Latitude"].fillna(0.0)
+    school_info["Longitude"] = school_info["Longitude"].fillna(0.0)
 
-    # Melt indicators → long format
+    # Melt indicators → long format - need to map full column names to indicator IDs
+    # Create a mapping from full column name to indicator ID
+    col_to_indicator = {}
+    for col in data.columns:
+        col_stripped = col.strip()
+        for ind_id in INDICATOR_IDS:
+            if col_stripped.startswith(ind_id):
+                col_to_indicator[col_stripped] = ind_id
+                break
+    
+    # Create a subset dataframe with only the indicator columns we need
+    indicator_cols = [col for col in col_to_indicator.keys()]
+    
     assessment_df = data.melt(
         id_vars=["School ID"],
-        value_vars=existing_indicators,
-        var_name="Indicator ID",
+        value_vars=indicator_cols,
+        var_name="Indicator Column",
         value_name="Score"
     )
+    # Map the full column name to the indicator ID
+    assessment_df["Indicator ID"] = assessment_df["Indicator Column"].map(col_to_indicator)
+    assessment_df = assessment_df.dropna(subset=["Indicator ID"])
     assessment_df["Score"] = pd.to_numeric(assessment_df["Score"], errors='coerce')
     assessment_df = assessment_df.dropna(subset=["Score"])
     assessment_df["Score"] = assessment_df["Score"].clip(0, 3)
@@ -88,10 +141,15 @@ def process_uploaded_data(df: pd.DataFrame) -> Dict:
         })
     div_to_id = {sdo["name"]: sdo["id"] for sdo in sdo_list}
 
-    # Process each school
+    # Process each school - optimized with groupby instead of loop
     schools_list = []
+    assessment_df["School ID"] = assessment_df["School ID"].astype(str)
+    
+    # Group assessments by school for faster lookup
+    grouped_assessments = {group_id: group for group_id, group in assessment_df.groupby("School ID")}
+    
     for _, school_row in school_info.iterrows():
-        school_id = school_row["School ID"]
+        school_id = str(school_row["School ID"])
         school_name = school_row["School Name"]
         division = school_row["Division"]
         sdo_id = div_to_id.get(division)
@@ -100,9 +158,9 @@ def process_uploaded_data(df: pd.DataFrame) -> Dict:
         enrollment = school_row["Enrollment"]
         school_type = school_row.get("Offering", "Elementary")
 
-        school_scores = assessment_df[assessment_df["School ID"] == school_id]
+        school_scores = grouped_assessments.get(school_id)
 
-        if school_scores.empty:
+        if school_scores is None or school_scores.empty:
             dim_scores = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
             overall_index = 0.0
             degree = "Pending"
@@ -177,9 +235,9 @@ def process_uploaded_data(df: pd.DataFrame) -> Dict:
         sdo["urgency_factor"] = round(1 - raw, 3)
 
     # ------------------------------------------------------------------
-    # Monte Carlo Simulation (500 iterations)
+    # Monte Carlo Simulation (100 iterations - reduced for performance)
     # ------------------------------------------------------------------
-    monte_carlo_results = run_monte_carlo(schools_list, n_iter=500)
+    monte_carlo_results = run_monte_carlo(schools_list, n_iter=100)
 
     return {
         "sdo_list": sdo_list,
