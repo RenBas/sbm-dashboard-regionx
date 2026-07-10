@@ -1,5 +1,6 @@
 """Main Streamlit application for SBM Dashboard – Region X."""
 
+from utils.export_helpers import generate_excel_report, generate_pdf_report
 import streamlit as st
 import random
 import pandas as pd
