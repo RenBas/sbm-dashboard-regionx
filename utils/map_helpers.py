@@ -150,8 +150,14 @@ def add_sdo_shield(map_obj, sdo):
     ).add_to(map_obj)
 
 
-def add_school_dot(map_obj, school):
+def add_school_dot(map_obj, school, dim_index=None):
+    """
+    Add a colour‑coded school dot.
+    - If dim_index is None, colour by overall_index.
+    - If dim_index is provided (0-5), colour by that dimension's score.
+    """
     is_pending = school.get("data_status") == "Pending"
+    
     if is_pending:
         fill_color = "#9ca3af"
         border_color = "#6b7280"
@@ -160,18 +166,29 @@ def add_school_dot(map_obj, school):
         fill_opacity = 0.4
         tooltip = f"{school.get('name', 'School')} (Data Pending)"
     else:
-        score = school.get("overall_index", 0)
+        if dim_index is not None and 0 <= dim_index < 6:
+            # Use specific dimension score
+            score = school.get("dimension_scores", [0]*6)[dim_index]
+            dim_name = DIMENSION_NAMES[dim_index]
+            tooltip = (
+                f"{school.get('name', 'School')} | "
+                f"{dim_name}: {score:.1f}"
+            )
+        else:
+            # Use overall index
+            score = school.get("overall_index", 0)
+            low_dim_idx = school.get("lowest_dim_index", 0)
+            low_dim_name = DIMENSION_NAMES[low_dim_idx] if 0 <= low_dim_idx < len(DIMENSION_NAMES) else "?"
+            tooltip = (
+                f"{school.get('name', 'School')} | SBM Index: {score:.1f} | "
+                f"Lowest: {low_dim_name} ({school.get('lowest_dim_score', 0):.1f})"
+            )
+        
         fill_color = score_to_color(score)
         border_color = "rgba(255,255,255,0.9)"
         weight = 2
         dash_array = None
         fill_opacity = 0.9
-        low_dim_idx = school.get("lowest_dim_index", 0)
-        low_dim_name = DIMENSION_NAMES[low_dim_idx] if 0 <= low_dim_idx < len(DIMENSION_NAMES) else "?"
-        tooltip = (
-            f"{school.get('name', 'School')} | SBM Index: {score:.1f} | "
-            f"Lowest: {low_dim_name} ({school.get('lowest_dim_score', 0):.1f})"
-        )
 
     size = get_school_dot_size(school.get("enrollment", 0))
     folium.CircleMarker(
