@@ -21,7 +21,7 @@ st.set_page_config(
 from utils.constants import DIMENSION_NAMES
 from utils.data_loader import load_sdo_data, load_all_schools, get_schools_by_sdo, compute_dimension_averages
 from utils.map_helpers import add_sdo_shield, add_school_dot
-from utils.chart_helpers import create_radar_chart, create_trend_chart, create_indicators_table
+from utils.chart_helpers import create_radar_chart, create_trend_chart, create_indicators_table, render_school_dashboard
 from utils.auth import (
     authenticate, login_status, logout, get_accessible_schools,
     get_accessible_divisions_summary, is_school_head
@@ -480,7 +480,6 @@ def process_uploaded_excel(uploaded_file):
         enrollment_raw = safe_int(row.get("Enrollment", 0))
         enrollment = enrollment_raw if enrollment_raw > 0 else 1
 
-        # ✅ Compute lowest dimension score & index for each school
         lowest_school_dim_score = min(dimension_scores)
         lowest_school_dim_index = dimension_scores.index(lowest_school_dim_score)
 
@@ -514,7 +513,6 @@ def process_uploaded_excel(uploaded_file):
     for sdo_name in sdo_names:
         div_schools = [s for s in schools if s["sdo_id"] == sdo_name]
 
-        # Pick first school with non‑zero coordinates for SDO location
         lat, lng = 0.0, 0.0
         for s in div_schools:
             if s["lat"] != 0.0 or s["lng"] != 0.0:
@@ -533,11 +531,8 @@ def process_uploaded_excel(uploaded_file):
 
         lowest_dim_score = min(dim_scores) if any(dim_scores) else 0.0
         overall_index = round(sum(dim_scores) / 6, 1) if any(dim_scores) else 0.0
-
-        # ✅ Urgency factor: 0 = perfect, 1 = worst
         urgency_factor = round((3.0 - overall_index) / 3.0, 2)
 
-        # ✅ Name of lowest dimension
         lowest_dim_idx = dim_scores.index(min(dim_scores))
         lowest_dim_name = DIMENSION_NAMES[lowest_dim_idx]
 
@@ -599,19 +594,29 @@ st.markdown(f"## 🎓 SBM Dashboard: {selected_sdo['name']}")
 st.caption(f"Capital: {selected_sdo.get('capital', '')} · {selected_sdo.get('id', '')} schools")
 
 # ─── Helper to render map safely ───
-def render_map(selected_sdo, filtered_sdos, schools_in_sdo):
-    """Render the map only if the SDO has valid coordinates."""
+def render_map(selected_sdo, filtered_sdos, schools_in_sdo, selected_dimension="Overall"):
+    """Render the map only if the SDO has valid coordinates.
+    If a specific dimension is selected, school dots are coloured by that dimension's score.
+    """
     lat = selected_sdo.get("lat", 0)
     lng = selected_sdo.get("lng", 0)
     if lat == 0.0 and lng == 0.0:
         st.warning("📍 Map unavailable – no geographic coordinates (Latitude/Longitude) provided for this division.")
         return
+
+    # Determine dimension index
+    if selected_dimension == "Overall" or selected_dimension not in DIMENSION_NAMES:
+        dim_index = None
+    else:
+        dim_index = DIMENSION_NAMES.index(selected_dimension)
+
     map_center = [lat, lng]
     m = folium.Map(location=map_center, zoom_start=8, tiles="CartoDB positron")
     for sdo in filtered_sdos:
         add_sdo_shield(m, sdo)
     for school in schools_in_sdo:
-        add_school_dot(m, school)
+        add_school_dot(m, school, dim_index=dim_index)
+
     st_folium(m, width=None, height=500, key="sbm_map")
 
 # ─── TABS ───
@@ -641,10 +646,9 @@ if role == "regional":
         st_html(wrapped_html, height=900, scrolling=True)
 
         st.markdown("---")
-        render_map(selected_sdo, filtered_sdos, schools_in_sdo)
+        render_map(selected_sdo, filtered_sdos, schools_in_sdo, selected_dimension)
 
         st.markdown("---")
-        # ✅ Updated legend with green colour
         st.markdown("""
         <div class="custom-footnote" style="padding:14px 18px;border-radius:8px;margin-bottom:14px;">
             <b>💡 About the Pulsing Glow:</b> The animated glow behind each SDO shield indicates <b>urgency based on the division's lowest SBM dimension score</b>.
@@ -791,10 +795,9 @@ elif role == "division":
         st_html(wrapped_html, height=900, scrolling=True)
 
         st.markdown("---")
-        render_map(selected_sdo, filtered_sdos, schools_in_sdo)
+        render_map(selected_sdo, filtered_sdos, schools_in_sdo, selected_dimension)
 
         st.markdown("---")
-        # (Use the same updated legend as above)
         st.markdown("""
         <div class="custom-footnote" style="padding:14px 18px;border-radius:8px;margin-bottom:14px;">
             <b>💡 About the Pulsing Glow:</b> The animated glow behind each SDO shield indicates <b>urgency based on the division's lowest SBM dimension score</b>.
@@ -850,9 +853,8 @@ elif role == "division":
 
     with tab2:
         st.markdown(f"### 📊 School Performance Dashboard – {selected_sdo['name']}")
-        from utils.chart_helpers import render_school_dashboard
         render_school_dashboard(schools_in_sdo)
-        
+
     with tab3:
         render_sandbox(sdo_list, selected_sdo, schools_in_sdo, complete_schools, dim_avgs, overall_avg)
 
