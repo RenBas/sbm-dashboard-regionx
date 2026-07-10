@@ -180,7 +180,7 @@ def update_active_users():
         return None
     try:
         key = f"session:{st.session_state.session_id}"
-        r.setex(key, 300, "1")  # 5‑minute TTL
+        r.setex(key, 300, "1")
         return len(r.keys("session:*"))
     except Exception:
         return None
@@ -303,7 +303,6 @@ if role != "school":
     else:
         schools_in_sdo = []
 else:
-    # School head: check if we already have a loaded school from session state
     if st.session_state.loaded_school is not None:
         schools_in_sdo = [st.session_state.loaded_school]
     elif filtered_schools:
@@ -397,7 +396,7 @@ with st.sidebar:
                 st.session_state.school_id_input = ""
                 st.rerun()
     else:
-        # Regional / Division: normal navigation
+        # Regional / Division navigation
         st.markdown("### 🗺️ Navigation")
         if sdo_list and selected_sdo:
             sdo_names = [s["name"] for s in filtered_sdos] if filtered_sdos else [s["name"] for s in sdo_list]
@@ -761,22 +760,20 @@ if role == "regional":
 
         st.markdown("---")
         st.markdown("""
-        <div class="custom-footnote" style="padding:14px 18px;border-radius:8px;margin-bottom:14px;">
+        <div style="padding:12px 14px;border-radius:6px;background:#f8f9fa;border-left:4px solid #0033a0;font-size:14px;color:#1a1a2e;margin-bottom:12px;">
             <b>💡 About the Pulsing Glow:</b> The animated glow behind each SDO shield indicates <b>urgency based on the division's lowest SBM dimension score</b>.
-            <br><br>
-            <div style="display:flex;flex-wrap:wrap;gap:12px 24px;margin-top:4px;">
-                <span style="color:#dc2626;font-weight:600;">🔴 Red glow</span> <span>Critical – Score < 1.0</span>
-                <span style="color:#f97316;font-weight:600;">🟠 Orange glow</span> <span>Warning – Score 1.0 – 1.9</span>
-                <span style="color:#eab308;font-weight:600;">🟡 Yellow glow</span> <span>Monitor – Score 2.0 – 2.4</span>
-                <span style="color:#22c55e;font-weight:600;">🟢 Green (shield only)</span> <span>Stable – Score ≥ 2.5</span>
+            <div style="display:flex;flex-wrap:wrap;gap:8px 16px;margin-top:6px;">
+                <span style="color:#dc2626;font-weight:600;">🔴 Red</span> Critical (<1.0) ·
+                <span style="color:#f97316;font-weight:600;">🟠 Orange</span> Warning (1.0‑1.9) ·
+                <span style="color:#eab308;font-weight:600;">🟡 Yellow</span> Monitor (2.0‑2.4) ·
+                <span style="color:#22c55e;font-weight:600;">🟢 Green</span> Stable (≥2.5) – no glow
             </div>
-            <div style="margin-top:8px;font-size:12px;opacity:0.6;">The glow pulses faster and brighter for more urgent divisions. Divisions with scores ≥ 2.5 show no glow.</div>
+            <div style="margin-top:6px;font-size:12px;opacity:0.7;">Faster pulses = more urgent divisions.</div>
         </div>
         """, unsafe_allow_html=True)
         st.markdown("""
-        <div style="background-color:var(--secondary-background-color);padding:10px 16px;border-radius:8px;border-left:4px solid #22c55e;margin-bottom:14px;color:var(--text-color);">
-            <b>📏 School Dot Sizes:</b> The size of each school dot represents its <b>total enrollment (number of learners)</b>.
-            Larger dots indicate schools with more students, while smaller dots indicate schools with fewer students.
+        <div style="background-color:var(--secondary-background-color);padding:8px 12px;border-radius:6px;border-left:4px solid #22c55e;margin-bottom:12px;color:var(--text-color);font-size:14px;">
+            <b>📏 School Dot Sizes:</b> size = enrolment (larger = more learners).
         </div>
         """, unsafe_allow_html=True)
         st.caption("💡 Click on any SDO shield to zoom in and view its schools. Hover over markers for more details.")
@@ -910,12 +907,12 @@ elif role == "division":
 
         st.markdown("---")
         st.markdown("""
-        <div class="custom-footnote" style="padding:14px 18px;border-radius:8px;margin-bottom:14px;">
+        <div style="padding:12px 14px;border-radius:6px;background:#f8f9fa;border-left:4px solid #0033a0;font-size:14px;color:#1a1a2e;margin-bottom:12px;">
             <b>💡 About the Pulsing Glow:</b> ... (same as before)
         </div>
         """, unsafe_allow_html=True)
         st.markdown("""
-        <div style="background-color:var(--secondary-background-color);padding:10px 16px;border-radius:8px;border-left:4px solid #22c55e;margin-bottom:14px;color:var(--text-color);">
+        <div style="background-color:var(--secondary-background-color);padding:8px 12px;border-radius:6px;border-left:4px solid #22c55e;margin-bottom:12px;color:var(--text-color);font-size:14px;">
             <b>📏 School Dot Sizes:</b> ... (same)
         </div>
         """, unsafe_allow_html=True)
@@ -1045,7 +1042,7 @@ else:
     else:
         st.warning("📍 Map unavailable – no coordinates provided for this school.")
 
-# ─── SEARCH RESULTS ───
+# ─── SEARCH RESULTS (styled cards) ───
 if search_query and schools:
     st.markdown("---")
     st.markdown(f"### 🔍 Search Results for '{search_query}'")
@@ -1053,10 +1050,15 @@ if search_query and schools:
     if matches:
         for match in matches:
             sdo = next((s for s in sdo_list if s["id"] == match.get("sdo_id")), None)
-            if sdo:
-                st.write(f"• **{match.get('name', '')}** ({match.get('type', '')}) – {sdo.get('name', '')}")
+            card_html = f"""
+            <div style="border:1px solid #e5e7eb;border-radius:8px;padding:12px;margin-bottom:8px;background:#ffffff;">
+                <b style="font-size:16px;">{match.get('name', '')}</b><br>
+                <span style="color:#6b7280;font-size:13px;">{match.get('type', '')} · {sdo.get('name', '') if sdo else 'Unknown SDO'}</span>
+            </div>
+            """
+            st.markdown(card_html, unsafe_allow_html=True)
     else:
         st.info("No schools found matching your search.")
 
 st.markdown("---")
-st.caption("© 2026 DepEd Region X – SBM Digital Twin Dashboard · Built with Streamlit")
+st.markdown("<div style='text-align:center;color:#9ca3af;font-size:13px;padding:10px 0;'>© 2026 DepEd Region X – SBM Digital Twin Dashboard · Built with Streamlit</div>", unsafe_allow_html=True)
