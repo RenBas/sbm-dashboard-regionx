@@ -163,9 +163,21 @@ def get_accessible_schools(user: Dict, sdo_list: List, all_schools: List) -> Dic
     if role == "regional":
         return {"filtered_sdos": sdo_list, "filtered_schools": all_schools}
     elif role == "division":
-        division_name = get_user_division(user)
-        filtered_sdos = [s for s in sdo_list if s["name"] == division_name]
-        filtered_schools = [s for s in all_schools if s["sdo_id"] in [sdo["id"] for sdo in filtered_sdos]]
+        division_name = get_user_division(user) or ""
+        # Normalize: remove leading "SDO " and compare case-insensitively
+        clean_name = division_name.strip()
+        if clean_name.lower().startswith("sdo "):
+            clean_name = clean_name[4:].strip()   # cut off "SDO "
+        
+        filtered_sdos = [
+            s for s in sdo_list
+            if s["name"].strip().lower() == clean_name.lower()
+        ]
+        if filtered_sdos:
+            sdo_ids = [sdo["id"] for sdo in filtered_sdos]
+            filtered_schools = [s for s in all_schools if s["sdo_id"] in sdo_ids]
+        else:
+            filtered_schools = []
         return {"filtered_sdos": filtered_sdos, "filtered_schools": filtered_schools}
     elif role == "school":
         school_id = get_user_school_id(user)
