@@ -148,30 +148,42 @@ else:
     regional_overall_avg = 0
 
 # ────────────────────────────────────────────────────────────────
-# 3. LIVE USER COUNTER (Upstash Redis) – import only when needed
+# 3. LIVE USER COUNTER (Upstash Redis) – fully fault‑tolerant
 # ────────────────────────────────────────────────────────────────
 def get_redis_connection():
-    """Return a Redis connection if secrets are configured, else None."""
+    """Return a Redis connection if secrets are configured and reachable, else None."""
     try:
-        import redis   # local import – avoids crash if not installed yet
-        return redis.Redis(
-            host=st.secrets["redis"]["host"],
-            port=st.secrets["redis"]["port"],
-            password=st.secrets["redis"]["password"],
+        import redis
+        host = st.secrets["redis"]["host"]
+        port = st.secrets["redis"]["port"]
+        password = st.secrets["redis"]["password"]
+    except Exception:
+        return None
+    try:
+        r = redis.Redis(
+            host=host,
+            port=port,
+            password=password,
             ssl=True,
-            decode_responses=True
+            decode_responses=True,
+            socket_connect_timeout=3
         )
+        r.ping()
+        return r
     except Exception:
         return None
 
 def update_active_users():
-    """Register this session and return the current active user count."""
+    """Register this session and return the current active user count, or None if unavailable."""
     r = get_redis_connection()
     if r is None:
         return None
-    key = f"session:{st.session_state.session_id}"
-    r.setex(key, 300, "1")  # 5‑minute TTL
-    return len(r.keys("session:*"))
+    try:
+        key = f"session:{st.session_state.session_id}"
+        r.setex(key, 300, "1")  # 5‑minute TTL
+        return len(r.keys("session:*"))
+    except Exception:
+        return None
 
 # ────────────────────────────────────────────────────────────────
 # 4. AUTHENTICATION (ROLE‑BASED LOGIN)
@@ -321,10 +333,10 @@ else:
 with st.sidebar:
     # ── User counter ──
     active_count = update_active_users()
-    if active_count is not None:
+    if active_count is not None and active_count > 0:
         st.caption(f"👥 Active viewers: {active_count}")
     else:
-        st.caption("👥 Active viewers: N/A (Redis not configured)")
+        st.caption("👥 Active viewers: N/A (Redis not available)")
 
     st.markdown(f"### 👤 {user_name}")
     st.caption(get_accessible_divisions_summary(user))
