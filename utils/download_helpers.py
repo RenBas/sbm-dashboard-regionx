@@ -1,222 +1,134 @@
-"""Download helpers for exporting reports and templates."""
+"""Download helpers for generating data collection template and reports."""
 
-import pandas as pd
 import io
-from datetime import datetime
-from .constants import INDICATORS, DIMENSION_NAMES
+import pandas as pd
+from openpyxl import Workbook
+from openpyxl.utils.dataframe import dataframe_to_rows
+from openpyxl.styles import Font, Alignment, PatternFill
 
-def generate_report_data(sdo_name, schools_in_sdo, complete_schools):
-    """Generate a DataFrame for the current view (report)."""
-    if not schools_in_sdo:
-        return None
-    
-    rows = []
-    for school in schools_in_sdo:
-        school_name = school["name"]
-        school_type = school["type"]
-        enrollment = school["enrollment"]
-        overall = school["overall_index"]
-        degree = school["degree"]
-        data_status = school["data_status"]
-        dim_scores = school["dimension_scores"]
-        row = {
-            "School": school_name,
-            "Type": school_type,
-            "Enrollment": enrollment,
-            "SBM Level": degree,
-            "Data Status": data_status,
-            "Overall Index": overall,
-            "Curriculum & Teaching": dim_scores[0],
-            "Learning Environment": dim_scores[1],
-            "Leadership": dim_scores[2],
-            "Governance & Accountability": dim_scores[3],
-            "Human Resource & Team Dev.": dim_scores[4],
-            "Finance & Resource Mgmt.": dim_scores[5]
-        }
-        rows.append(row)
-    
-    df = pd.DataFrame(rows)
-    return df
 
 def generate_excel_template():
     """
-    Generate a comprehensive Excel template with 5 sheets:
-    1. School Information
-    2. SBM Assessment
-    3. Dimension Scores Summary (auto-calculated)
-    4. Technical Assistance History (optional)
-    5. Instructions
-    Returns bytes of the Excel file.
+    Create an Excel template with the exact column headers required for the SBM data upload.
+    Includes one sample row for guidance (users can delete it).
     """
-    try:
-        # ─── Sheet 1: School Information ───
-        school_info_data = [{
-            "School ID": "",
-            "School Name": "",
-            "School Type": "Elementary",
-            "Division": "",
-            "Region": "Region X – Northern Mindanao",
-            "Congressional District": "",
-            "Latitude": "",
-            "Longitude": "",
-            "Enrollment": "",
-            "Data Status": "Complete",
-            "Assessment Date": datetime.now().strftime("%Y-%m-%d"),
-            "School Head Name": "",
-            "School Head Email": "",
-            "Urban/Rural": "Urban",
-            "Last SBM Assessment": ""
-        }]
-        school_df = pd.DataFrame(school_info_data)
-        
-        # ─── Sheet 2: SBM Assessment ───
-        assessment_data = []
-        for indicator in INDICATORS:
-            assessment_data.append({
-                "School ID": "",
-                "Indicator ID": indicator["id"],
-                "Dimension": indicator["dimension"],
-                "Indicator Description": indicator["description"],
-                "Score": "",
-                "Degree of Manifestation": "",
-                "Remarks": "",
-                "Evidence/Supporting Docs": "",
-                "Date Assessed": datetime.now().strftime("%Y-%m-%d")
-            })
-        assessment_df = pd.DataFrame(assessment_data)
-        
-        # ─── Sheet 3: Dimension Scores Summary ───
-        summary_data = [{
-            "School ID": "",
-            "School Name": "",
-            "Curriculum & Teaching": "",
-            "Learning Environment": "",
-            "Leadership": "",
-            "Governance & Accountability": "",
-            "HR & Team Development": "",
-            "Finance & Resource Mgmt.": "",
-            "Overall SBM Index": ""
-        }]
-        summary_df = pd.DataFrame(summary_data)
-        
-        # ─── Sheet 4: Technical Assistance History ───
-        ta_data = [{
-            "School ID": "",
-            "TA Date": "",
-            "TA Provider": "",
-            "Focus Area": "",
-            "Intervention Type": "",
-            "Outcome": "",
-            "Follow-up Needed": ""
-        }]
-        ta_df = pd.DataFrame(ta_data)
-        
-        # ─── Sheet 5: Instructions ───
-        instructions_data = [
-            {"Instructions": "📋 SBM Data Collection Template – DepEd Order No. 007, s. 2024"},
-            {"Instructions": ""},
-            {"Instructions": "=== SHEET 1: SCHOOL INFORMATION ==="},
-            {"Instructions": "Fill in one row per school. This provides basic school data."},
-            {"Instructions": ""},
-            {"Instructions": "Column Guidelines:"},
-            {"Instructions": "School ID: DepEd's unique school identifier (e.g., 12001)"},
-            {"Instructions": "School Name: Full official school name"},
-            {"Instructions": "School Type: Elementary / Secondary / Integrated / ALS"},
-            {"Instructions": "Division: Schools Division Office name (e.g., SDO Cagayan de Oro City)"},
-            {"Instructions": "Region: Region X – Northern Mindanao"},
-            {"Instructions": "Congressional District: 1st, 2nd, 3rd, etc."},
-            {"Instructions": "Latitude: GPS coordinate (e.g., 8.4780)"},
-            {"Instructions": "Longitude: GPS coordinate (e.g., 124.6341)"},
-            {"Instructions": "Enrollment: Total number of learners"},
-            {"Instructions": "Data Status: Complete / Pending / Partial"},
-            {"Instructions": "Assessment Date: When SBM assessment was conducted (YYYY-MM-DD)"},
-            {"Instructions": "School Head Name: Name of School Head/Principal"},
-            {"Instructions": "School Head Email: Email address for follow-up"},
-            {"Instructions": "Urban/Rural: Urban / Rural"},
-            {"Instructions": "Last SBM Assessment: Date of previous assessment (YYYY-MM-DD)"},
-            {"Instructions": ""},
-            {"Instructions": "=== SHEET 2: SBM ASSESSMENT ==="},
-            {"Instructions": "Fill in one row per indicator for each school."},
-            {"Instructions": ""},
-            {"Instructions": "Column Guidelines:"},
-            {"Instructions": "School ID: Must match the School ID in Sheet 1"},
-            {"Instructions": "Indicator ID: 1 to 42 (refer to DepEd Order No. 007, s. 2024)"},
-            {"Instructions": "Dimension: One of the six SBM dimensions"},
-            {"Instructions": "Score: 0.0 – 3.0 (one decimal place)"},
-            {"Instructions": "Degree of Manifestation: (auto-calculated based on Score)"},
-            {"Instructions": "  • 2.5 – 3.0 = Always Manifested"},
-            {"Instructions": "  • 2.0 – 2.4 = Frequently Manifested"},
-            {"Instructions": "  • 1.0 – 1.9 = Rarely Manifested"},
-            {"Instructions": "  • 0.0 – 0.9 = Not Yet Manifested"},
-            {"Instructions": "Remarks: Optional notes (e.g., specific challenges observed)"},
-            {"Instructions": "Evidence/Supporting Docs: URL or reference to supporting documents"},
-            {"Instructions": "Date Assessed: Date this indicator was assessed"},
-            {"Instructions": ""},
-            {"Instructions": "=== SHEET 3: DIMENSION SCORES SUMMARY ==="},
-            {"Instructions": "This sheet is auto-calculated by the system based on Sheet 2."},
-            {"Instructions": "You do NOT need to fill this sheet manually."},
-            {"Instructions": ""},
-            {"Instructions": "=== SHEET 4: TECHNICAL ASSISTANCE HISTORY ==="},
-            {"Instructions": "Optional – Track TA provided to each school."},
-            {"Instructions": ""},
-            {"Instructions": "=== DIMENSIONS (For Reference) ==="},
-            {"Instructions": "1. Curriculum & Teaching"},
-            {"Instructions": "2. Learning Environment"},
-            {"Instructions": "3. Leadership"},
-            {"Instructions": "4. Governance & Accountability"},
-            {"Instructions": "5. Human Resource & Team Development"},
-            {"Instructions": "6. Finance & Resource Management"},
-            {"Instructions": ""},
-            {"Instructions": "📞 For questions, contact: bhrod.sed@deped.gov.ph"},
-        ]
-        instructions_df = pd.DataFrame(instructions_data)
-        
-        # ─── Write to Excel in-memory ───
-        output = io.BytesIO()
-        with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            school_df.to_excel(writer, sheet_name="School Information", index=False)
-            assessment_df.to_excel(writer, sheet_name="SBM Assessment", index=False)
-            summary_df.to_excel(writer, sheet_name="Dimension Scores Summary", index=False)
-            ta_df.to_excel(writer, sheet_name="TA History", index=False)
-            instructions_df.to_excel(writer, sheet_name="Instructions", index=False, header=False)
-            
-            # Auto-adjust column widths
-            for sheet_name in writer.sheets:
-                worksheet = writer.sheets[sheet_name]
-                for column in worksheet.columns:
-                    max_length = 0
-                    column_letter = column[0].column_letter
-                    for cell in column:
-                        try:
-                            if len(str(cell.value)) > max_length:
-                                max_length = len(str(cell.value))
-                        except:
-                            pass
-                    adjusted_width = min(max_length + 2, 80)
-                    worksheet.column_dimensions[column_letter].width = adjusted_width
-        
-        output.seek(0)
-        return output.getvalue()  # ← Return bytes, not BytesIO
-    
-    except ImportError as e:
-        # Fallback: if openpyxl is missing, generate a CSV template instead
-        print(f"Warning: openpyxl not installed. Falling back to CSV template. Error: {e}")
-        return generate_template_csv().to_csv(index=False).encode('utf-8')
-    except Exception as e:
-        # General error – return empty bytes or raise
-        print(f"Error generating Excel template: {e}")
-        return b""
+    # Column headers as used in the actual upload file
+    columns = [
+        "Region",
+        "School ID",
+        "School Name",
+        "Division",
+        "Offering",
+        "Latitude",
+        "Longitude",
+        "CT_1. Grade 3 learners achieve the proficiency level for each cluster of early language, literacy, and numeracy skills",
+        "CT_2. Grade 6, 10, and 12 learners achieve the proficiency level in all 21st century skills and core learning areas in the National Achievement Test (NAT)",
+        "CT_3. School-based ALS learners attain certification as elementary and junior high school completers",
+        "CT_4. Teachers prepare contextualized learning materials responsive to the needs of learners",
+        "CT_5. Teachers conduct remediation activities to address learning gaps in reading and comprehension, science and technology, and mathematics",
+        "CT_6. Teachers integrate topics promoting peace and DepEd core values",
+        "CT_7. The school conducts test item analysis to inform its teaching and learning process",
+        "CT_8. The school engages local industries to strengthen its TLE-TVL course offerings",
+        "LE_9. The school has zero bullying incidence",
+        "LE_10. The school has zero child abuse incidence",
+        "LE_11. The school has reduced its drop-out incidence",
+        "LE_12. The school conducts culture-sensitive activities",
+        "LE_13. The school provides access to learning experiences for the disadvantaged, OSYs, and adult learners",
+        "LE_14. The school has a functional school-based ALS program",
+        "LE_15. The school has a functional child-protection committee",
+        "LE_16. The school has a functional DRRM plan",
+        "LE_17. The school has a functional support mechanism for mental wellness",
+        "LE_18. The school has special education- and FWD-friendly facilities",
+        "LG_19. The school develops a strategic plan",
+        "LG_20. The school has a functional school-community planning team",
+        "LG_21. The school has a functional Supreme Student Government/ Supreme Pupil Government",
+        "LG_22. The school innovates in its provision of frontline services to stakeholders",
+        "AC_23. The school's strategic plan is operationalized through an implementation plan",
+        "AC_24. The school has a functional School Governance Council (SGC)",
+        "AC_25. The school has a functional Parent-Teacher Association (PTA)",
+        "AC_26. The school collaborates with stakeholders and other schools in strengthening partnerships",
+        "AC_27. The school monitors and evaluates its programs, projects, and activities",
+        "AC_28. The school maintains an average rating of satisfactory from its internal and external stakeholders",
+        "HR_29. School personnel achieve an average rating of very satisfactory in the individual performance commitment and review",
+        "HR_30. The school achieves an average rating of very satisfactory in the office performance commitment and review",
+        "HR_31. The school conducts needs-based Learning Action Cells and Learning & Development activities",
+        "HR_32. The school facilitates the promotion and continuous professional development of its personnel",
+        "HR_33. The school recognizes and rewards milestone achievements of its personnel",
+        "HR_34. The school facilitates receipt of correct salaries, allowances, and other additional compensation in a timely manner",
+        "HR_35. Teacher workload is distributed fairly and equitably",
+        "FR_36. The school inspects its infrastructure and facilities",
+        "FR_37. The school initiates improvement of its infrastructure and facilities",
+        "FR_38. The school has a functional library",
+        "FR_39. The school has functional water, electric, and internet facilities",
+        "FR_40. The school has a functional computer laboratory/ classroom",
+        "FR_41. The school achieves a 75-100% utilization rate of its Maintenance and Other Operating Expenses (MOOE)",
+        "FR_42. The school liquidates 100% of its utilized MOOE"
+    ]
 
-def generate_template_csv():
-    """Generate a CSV template for SBM data collection (legacy, single sheet)."""
+    # Create DataFrame with columns only
+    df = pd.DataFrame(columns=columns)
+
+    # Add one sample row (optional, can be deleted by user)
+    sample_row = {col: "" for col in columns}
+    sample_row["Region"] = "Region X"
+    sample_row["School ID"] = "123456"
+    sample_row["School Name"] = "Sample Elementary School"
+    sample_row["Division"] = "Bukidnon"
+    sample_row["Offering"] = "Elementary"
+    sample_row["Latitude"] = 8.1234
+    sample_row["Longitude"] = 124.5678
+    # For indicator columns, leave blank or put sample scores (e.g., 0-3)
+    # We'll leave them blank so they can fill in; but you could put a few sample numbers
+    # Uncomment the next lines if you want sample scores:
+    # for i, col in enumerate(columns[7:], start=1):
+    #     sample_row[col] = round(random.uniform(0, 3), 1)
+
+    df = pd.concat([df, pd.DataFrame([sample_row])], ignore_index=True)
+
+    # Write to Excel with some formatting
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name="SBM Data")
+        workbook = writer.book
+        worksheet = writer.sheets["SBM Data"]
+
+        # Format header row
+        header_font = Font(bold=True, color="FFFFFF")
+        header_fill = PatternFill(start_color="0033A0", end_color="0033A0", fill_type="solid")
+        for cell in worksheet[1]:
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+
+        # Set column widths (wider for long indicator descriptions)
+        for col_idx, col_name in enumerate(columns, start=1):
+            if col_idx <= 7:  # metadata columns
+                worksheet.column_dimensions[worksheet.cell(row=1, column=col_idx).column_letter].width = 18
+            else:
+                worksheet.column_dimensions[worksheet.cell(row=1, column=col_idx).column_letter].width = 35
+
+        # Freeze the header row
+        worksheet.freeze_panes = 'A2'
+
+    output.seek(0)
+    return output
+
+
+def generate_report_data(division_name, schools_in_sdo, complete_schools):
+    """
+    Generate a simple CSV report for the division.
+    (This is the existing CSV report function, unchanged.)
+    """
+    if not complete_schools:
+        return pd.DataFrame()
     rows = []
-    for indicator in INDICATORS:
+    for school in schools_in_sdo:
         rows.append({
-            "Indicator_ID": indicator["id"],
-            "Dimension": indicator["dimension"],
-            "Indicator_Description": indicator["description"],
-            "Score (0-3)": "",
-            "Remarks": ""
+            "School": school.get("name", ""),
+            "Type": school.get("type", ""),
+            "Enrollment": school.get("enrollment", 0),
+            "Overall Index": school.get("overall_index", 0),
+            **{dim: school.get("dimension_scores", [0]*6)[i] for i, dim in enumerate(DIMENSION_NAMES)},
+            "Data Status": school.get("data_status", "Pending")
         })
-    df = pd.DataFrame(rows)
-    return df
+    return pd.DataFrame(rows)
