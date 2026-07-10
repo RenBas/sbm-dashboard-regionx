@@ -607,7 +607,7 @@ def render_map(selected_sdo, filtered_sdos, schools_in_sdo):
         st.warning("📍 Map unavailable – no geographic coordinates (Latitude/Longitude) provided for this division.")
         return
     map_center = [lat, lng]
-    m = folium.Map(location=map_center, zoom_start=8, tiles="OpenStreetMap")
+    m = folium.Map(location=map_center, zoom_start=8, tiles="CartoDB positron")
     for sdo in filtered_sdos:
         add_sdo_shield(m, sdo)
     for school in schools_in_sdo:
