@@ -1,7 +1,6 @@
 """Main Streamlit application for SBM Dashboard – Region X."""
 
 import streamlit as st
-import random
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -796,19 +795,7 @@ if role == "regional":
             else:
                 st.info("No dimension data available for this division.")
         with btab3:
-            if complete_schools:
-                random.seed(42)
-                current_avg = overall_avg
-                years = ["2023-2024", "2022-2023", "2021-2022"]
-                values = [
-                    current_avg,
-                    round(max(0, min(3, current_avg - 0.2 + (random.random() - 0.5) * 0.4)), 1),
-                    round(max(0, min(3, current_avg - 0.4 + (random.random() - 0.5) * 0.4)), 1)
-                ]
-                fig = create_trend_chart(years, values)
-                st.plotly_chart(fig, width='stretch')
-            else:
-                st.info("No historical data available for this division.")
+            st.info("Historical trend data is not available in the current data set. This tab will display real multi‑year trends once historical assessment data is included in the uploaded Excel file.")
 
     with tab2:
         st.markdown("### 📊 Division Performance Matrix")
@@ -936,19 +923,7 @@ elif role == "division":
             else:
                 st.info("No dimension data available for this division.")
         with btab3:
-            if complete_schools:
-                random.seed(42)
-                current_avg = overall_avg
-                years = ["2023-2024", "2022-2023", "2021-2022"]
-                values = [
-                    current_avg,
-                    round(max(0, min(3, current_avg - 0.2 + (random.random() - 0.5) * 0.4)), 1),
-                    round(max(0, min(3, current_avg - 0.4 + (random.random() - 0.5) * 0.4)), 1)
-                ]
-                fig = create_trend_chart(years, values)
-                st.plotly_chart(fig, width='stretch')
-            else:
-                st.info("No historical data available for this division.")
+            st.info("Historical trend data is not available in the current data set. This tab will display real multi‑year trends once historical assessment data is included in the uploaded Excel file.")
 
     with tab2:
         st.markdown(f"### 📊 School Performance Dashboard – {selected_sdo['name']}")
