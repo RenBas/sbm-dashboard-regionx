@@ -148,41 +148,68 @@ if not auth_status["logged_in"]:
         <h1>🎓 SBM Digital Twin Dashboard</h1>
         <p style="color:#6b7280;font-size:18px;">DepEd Region X – Northern Mindanao</p>
         <div style="margin-top:40px;max-width:450px;margin-left:auto;margin-right:auto;">
-            <div style="background:#f8f9fa;padding:30px;border-radius:10px;border:1px solid #e5e7eb;">
-                <h3 style="margin-top:0;">🔐 Sign In</h3>
-                <div style="text-align:left;font-size:13px;color:#4b5563;background:#f1f5f9;padding:12px;border-radius:6px;margin:12px 0;">
-                    <b>Demo Credentials:</b><br>
-                    <b>Regional:</b> regional / regional123<br>
-                    <b>Divisions (password: sdo123):</b><br>
-                    <span style="margin-left:10px;">sdo_bukidnon · sdo_cdo · sdo_misamis_occ · sdo_iligan · sdo_valencia</span><br>
-                    <b>School Heads (password: school123):</b><br>
-                    <span style="margin-left:10px;">principal_cdo · principal_bukidnon · principal_ozamiz · principal_iligan · principal_valencia · principal_misamis_occ</span><br>
-                    <i style="font-size:12px;color:#6b7280;">(Copy username exactly as shown)</i>
-    </div>
+        <div style="background:#f8f9fa;padding:30px;border-radius:10px;border:1px solid #e5e7eb;">
+            <h3 style="margin-top:0;">🔐 Sign In</h3>
+            <p style="font-size:14px;color:#4b5563;">Select your role to see demo credentials.</p>
     """, unsafe_allow_html=True)
-    with st.form("login_form"):
-        username = st.text_input("Username", placeholder="Enter your username")
-        password = st.text_input("Password", type="password", placeholder="Enter your password")
-        submitted = st.form_submit_button("🔑 Sign In", use_container_width=True)
-        if submitted:
-            if username and password:
-                user = authenticate(username, password)
-                if user:
-                    st.session_state.user = user
-                    st.rerun()
-                else:
-                    st.error("❌ Invalid username or password.")
+
+# ── Role selector ──
+login_role = st.selectbox(
+    "I am a…",
+    options=["Regional", "Division", "School Head"],
+    index=None,
+    placeholder="Choose your role",
+    key="login_role"
+)
+
+# ── Display credentials based on selected role ──
+if login_role == "Regional":
+    st.info("👤 Demo Account\n\nUsername: `regional`\nPassword: `regional123`")
+elif login_role == "Division":
+    st.info(
+        "👥 Demo Division Accounts (password: `sdo123`)\n\n"
+        "• `sdo_bukidnon`\n"
+        "• `sdo_cdo`\n"
+        "• `sdo_misamis_occ`\n"
+        "• `sdo_iligan`\n"
+        "• `sdo_valencia`"
+    )
+elif login_role == "School Head":
+    st.info(
+        "🏫 Demo School Head Accounts (password: `school123`)\n\n"
+        "• `principal_cdo`\n"
+        "• `principal_bukidnon`\n"
+        "• `principal_ozamiz`\n"
+        "• `principal_iligan`\n"
+        "• `principal_valencia`\n"
+        "• `principal_misamis_occ`"
+    )
+
+# ── Login form (always visible) ──
+with st.form("login_form"):
+    username = st.text_input("Username", placeholder="Enter your username")
+    password = st.text_input("Password", type="password", placeholder="Enter your password")
+    submitted = st.form_submit_button("🔑 Sign In", use_container_width=True)
+    if submitted:
+        if username and password:
+            user = authenticate(username, password)
+            if user:
+                st.session_state.user = user
+                st.rerun()
             else:
-                st.warning("Please enter both username and password.")
-    st.markdown("""
-            </div>
+                st.error("❌ Invalid username or password.")
+        else:
+            st.warning("Please enter both username and password.")
+
+st.markdown("""
         </div>
-        <p style="color:#9ca3af;font-size:12px;margin-top:20px;">
-            For demonstration purposes only. Real authentication will be implemented post-pilot.
-        </p>
     </div>
-    """, unsafe_allow_html=True)
-    st.stop()
+    <p style="color:#9ca3af;font-size:12px;margin-top:20px;">
+        For demonstration purposes only. Real authentication will be implemented post-pilot.
+    </p>
+</div>
+""", unsafe_allow_html=True)
+st.stop()
 
 user = st.session_state.user
 if user is None:
